@@ -1,9 +1,11 @@
 package com.mogutofu.mcai;
 
 import com.google.gson.Gson;
+import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.mogutofu.mcai.net.NetProtocol;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
@@ -17,6 +19,7 @@ import java.net.http.HttpResponse;
 import java.net.http.HttpTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.Base64;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
@@ -29,6 +32,9 @@ import java.util.concurrent.Executors;
  * {@link CompletableFuture#supplyAsync}；HTTP 阻塞在 {@code mcai-http} 线程池里等；
  * 拿到结果再用 {@link MinecraftServer#execute(Runnable)} 回到服务端线程发消息。
  * 全程主线程不阻塞，网络再慢也只会让玩家多等一会儿聊天栏。</p>
+ *
+ * <p>1.1.0：请求体可以带一个附件（截图或本地文件），附件以规范 base64 放进
+ * {@code attachments} 数组；带附件的请求超时至少 90 秒。</p>
  */
 public final class AiHttpClient {
 
@@ -52,20 +58,30 @@ public final class AiHttpClient {
     private AiHttpClient() {
     }
 
+    /** 旧版纯文本请求。 */
+    public static void ask(MinecraftServer server, ServerPlayer player, String text) {
+        ask(server, player, text, null);
+    }
+
     /**
-     * 异步问一次 AI，结果直接发到玩家聊天栏。
+     * 问一次 AI（可带一个附件），结果直接发到玩家聊天栏。
      *
      * <p>这里只在调用线程（服务端主线程）上读取玩家信息，之后的闭包里只用
      * {@link UUID} 和名字，不跨线程碰 {@link ServerPlayer} 对象。</p>
      */
-    public static void ask(MinecraftServer server, ServerPlayer player, String text) {
+    public static void ask(MinecraftServer server, ServerPlayer player, String text, AiAttachment attachment) {
         UUID playerId = player.getUUID();
         String playerName = player.getGameProfile().getName();
         String endpoint = McaiConfig.endpoint();
         int timeoutSeconds = McaiConfig.timeoutSeconds();
+        if (attachment != null) {
+            timeoutSeconds = Math.max(timeoutSeconds, NetProtocol.MIN_HTTP_TIMEOUT_SECONDS);
+        }
+        String safeText = text == null ? "" : text;
+        int effectiveTimeout = timeoutSeconds;
 
         CompletableFuture
-                .supplyAsync(() -> post(endpoint, playerName, playerId, text, timeoutSeconds), EXECUTOR)
+                .supplyAsync(() -> post(endpoint, playerName, playerId, safeText, effectiveTimeout, attachment), EXECUTOR)
                 .thenAccept(outcome -> deliver(server, playerId, outcome))
                 .exceptionally(throwable -> {
                     deliver(server, playerId, Outcome.failure(reasonOf(throwable)));
@@ -75,11 +91,24 @@ public final class AiHttpClient {
 
     // ── 网络 ──────────────────────────────────────────────────────────
 
-    private static Outcome post(String endpoint, String playerName, UUID playerId, String text, int timeoutSeconds) {
+    private static Outcome post(String endpoint, String playerName, UUID playerId, String text,
+                                int timeoutSeconds, AiAttachment attachment) {
         JsonObject payload = new JsonObject();
         payload.addProperty("player", playerName);
         payload.addProperty("uuid", playerId.toString());
         payload.addProperty("text", text);
+        if (attachment != null) {
+            JsonArray attachments = new JsonArray();
+            JsonObject item = new JsonObject();
+            item.addProperty("kind", attachment.image ? "image" : "file");
+            item.addProperty("name", attachment.name);
+            item.addProperty("mediaType", attachment.mediaType);
+            item.addProperty("data", Base64.getEncoder().encodeToString(attachment.data));
+            attachments.add(item);
+            payload.add("attachments", attachments);
+            McaiMod.LOGGER.info("[mcai] {} 的请求带附件 {}（{}，{} 字节）",
+                    playerName, attachment.name, attachment.mediaType, attachment.data.length);
+        }
 
         HttpRequest request;
         try {

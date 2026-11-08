@@ -1,44 +1,68 @@
-# /ai 指令 · Mod ↔ DSH 通信协议
+# mcai ↔ DSH 协议（mod 1.1.0 / 插件 dsh-mc-server-ops ≥ 0.6.0）
 
-## 方向：游戏 → DSH
+mod 把游戏内 `/ai` 请求 POST 到 DSH 插件监听的本机地址（默认 `http://127.0.0.1:8765/mc-ai`）。
 
-```
-POST http://127.0.0.1:8765/mc-ai
-Content-Type: application/json
+## 请求
 
-{"player": "Steve", "uuid": "069a79f4-44e9-4726-a5be-fca90e38aaf5", "text": "你好小铜"}
-```
-
-- 地址、端口可配置（mod 配置文件里改），默认 `127.0.0.1:8765`
-- 只在服务器本机回环，不对外网开放
-- 单次请求超时 60 秒（mod 侧可配）
-
-## 返回
-
-成功：
+`POST /mc-ai`，`Content-Type: application/json`：
 
 ```json
-{"ok": true, "reply": "你好呀，今天服务器挺稳的。", "elapsedMs": 3210}
+{
+  "player": "sxh258",
+  "uuid": "54c9346b-e5c5-34d6-bdb1-901927a41dbb",
+  "text": "你好",
+  "attachments": [
+    { "kind": "image", "name": "screenshot.png", "mediaType": "image/png", "data": "<canonical base64>" }
+  ]
+}
 ```
 
-失败（HTTP 状态码可能是 200 或非 200，一律看 `ok`）：
+| 字段 | 必填 | 说明 |
+| --- | --- | --- |
+| `player` | 是 | 玩家名，用于日志和 AI 称呼 |
+| `uuid` | 是 | 玩家 UUID；DSH 插件用 `mc-ai:<uuid>` 做独立会话，上下文连续 |
+| `text` | 是（可为空串） | 玩家消息 |
+| `attachments` | 否 | 附件数组，1.1.0 每次最多 1 个 |
+
+附件对象：
+
+| 字段 | 说明 |
+| --- | --- |
+| `kind` | `image` 或 `file` |
+| `name` | 文件名（≤ 255 字符） |
+| `mediaType` | 图片：`image/png` / `image/jpeg` / `image/webp` / `image/gif`；文件：`application/octet-stream` 或原类型 |
+| `data` | **规范 base64**（`Base64.getEncoder()` 无换行编码；用 `/`、`+`、`=` 的普通字母表） |
+
+限制（服务端和 DSH 插件都会校验）：
+
+- 图片解码后 ≤ 8MB；文件解码后 ≤ 16MB；单请求附件总量 ≤ 24MB。
+- 截图以 PNG 发送（`kind=image`、`mediaType=image/png`、`name=screenshot.png`）。
+- 图片扩展名的本地文件（png/jpeg/webp/gif）也按 `kind=image` 发送，让模型直接看图；其它按 `kind=file`。
+
+## 响应
 
 ```json
-{"ok": false, "error": "AI 忙不过来，稍后再试"}
+{ "ok": true, "reply": "你好呀。", "elapsedMs": 1234 }
 ```
 
-## 游戏中表现
+失败时 HTTP 仍是 200，但 `ok=false` 并带 `error`：
 
-- 玩家输入 `/ai 内容`
-- 命令发给 DSH 后，玩家看到一行灰色提示「小桐正在输入…」（可选）
-- 收到回复后，玩家收到 `[小铜] 回复内容`（黄色 / aqua）
-- 失败时收到 `[小铜] 出错了：原因`
-- 同一玩家 5 秒内只能发一次，超了提示「慢一点」
-- **所有玩家权限相同**：op 不会获得额外能力，因为 DSH 侧只按「普通玩家」判定
+```json
+{ "ok": false, "error": "附件图片类型不支持：image/bmp" }
+```
 
-## 权限模型（DSH 侧）
+mod 按 `ok` 判断，把 `reply` 或错误提示贴到玩家聊天栏。
 
-- 每个玩家一个独立会话，sessionId 形如 `mc-ai:<玩家uuid>`
-- 会话不是本机会话，所以 dsh-mc-server-ops 的权限守卫按「群友」处理：
-  只能读文件、查状态；写文件 / 执行命令 / 开服等高危操作需要服主授权或投票
-- 不传 MC 的 op 状态，op 和普通玩家完全一样
+## 兼容性
+
+| mod | 插件 | 文字 | 截图/文件附件 |
+| --- | --- | --- | --- |
+| 1.0.x | 0.5.x | ✅ | ❌（无附件协议） |
+| 1.1.0 | 0.5.x | ✅ | ❌ 插件会忽略 `attachments`（不推荐） |
+| 1.1.0 | ≥ 0.6.0 | ✅ | ✅ |
+
+## 客户端 ↔ 服务端（Forge 网络，仅附件）
+
+- 通道：`mcai:net`，协议版本字符串 `"1"`；只在专用服务器（服务端）与客户端（客户端模组）各自注册，避免重复注册。
+- 消息：`ClientHello`（C→S）、`AttachmentRequest`（S→C）、`AttachmentChunk`（C→S，24KB/块）、`AttachmentAbort`（C→S）、`AttachmentTooLarge`（S→C）。
+- 服务端为每个玩家维护一个待传输请求，15 秒超时；无 `ClientHello` 视为未装客户端模组，降级为只发文字。
