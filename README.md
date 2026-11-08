@@ -6,8 +6,8 @@
 
 | 模组 | modid | 装在哪里 | 说明 |
 | --- | --- | --- | --- |
-| `mcai-server`（本仓库根工程，产物 `mcai-1.1.0.jar`） | `mcai` | **服务端必装** | `/ai` 指令、与 DSH 通信；不装客户端模组时只发文字 |
-| `mcai-client`（本仓库 `client/` 工程，产物 `mcai-client-1.1.0.jar`） | `mcai_client` | **客户端选装** | 让 `/ai screenshot`、`/ai file` 能截图/读本地文件发到服务端 |
+| `mcai-server`（本仓库根工程，产物 `mcai-1.1.1.jar`） | `mcai` | **服务端必装** | `/ai` 指令、与 DSH 通信；不装客户端模组时只发文字 |
+| `mcai-client`（本仓库 `client/` 工程，产物 `mcai-client-1.1.1.jar`） | `mcai_client` | **客户端选装** | 让 `/ai screenshot`、`/ai file` 能截图/读本地文件发到服务端 |
 
 > 服务端没装 `dsh-mc-server-ops` 插件的话，mod 能加载但 `/ai` 没有 AI 可聊。插件：<https://github.com/mogutofu/dsh-mc-server-ops>
 
@@ -24,12 +24,13 @@
 
 - 客户端没装 `mcai-client` 时，`/ai screenshot`、`/ai file` 会**降级为只发文字**（聊天栏会提示「客户端未安装 mcai-client」）。
 - 附件功能只支持**专用服务器**（dedicated server）；单机/内置服务器会按「没有客户端模组」降级。
-- `/ai file` 的路径是**玩家自己电脑上的路径**，由客户端读取后只把文件字节发给服务器。路径参数是 Brigadier 的 quoted string：含空格或 Windows 反斜杠时要加引号，反斜杠写两个（如 `/ai file "C:\\tmp\\a.txt" 看看这个`），或者直接用正斜杠 `/ai file "C:/tmp/a.txt" 看看这个`。
+- `/ai file` 的路径是**玩家自己电脑上的路径**，由客户端读取后只把文件字节发给服务器。
+- 路径写法（1.1.1 起不用再转义反斜杠）：`/ai file "C:\Users\me\笔记.md" 这个文件是什么`；路径有空格时用引号包起来，没有空格也可以不加引号（`/ai file C:/tmp/a.md 看看这个`）。
 - 服务端侧有每玩家限流（`rateLimitSeconds`，默认 5 秒）。
 
 ## 安装
 
-1. 服务端 `mods/` 放 `mcai-1.1.0.jar`；可选：客户端 `mods/` 放 `mcai-client-1.1.0.jar`。
+1. 服务端 `mods/` 放 `mcai-1.1.1.jar`；可选：客户端 `mods/` 放 `mcai-client-1.1.1.jar`。
 2. 服务端装好 DSH 与 `dsh-mc-server-ops` 插件（≥ 0.6.0 才支持附件），并保持 `/mc-ai` 监听（默认 `127.0.0.1:8765`）。
 3. 重启服务器；首次启动生成 `config/mcai-common.toml`。
 4. 游戏内 `/ai 你好`。
@@ -55,10 +56,10 @@
 需要 **JDK 17**（Forge 1.20.1 要求）和 Gradle 8.1.1（仓库自带 wrapper）。
 
 ```bash
-# 服务端模组：产物 build/libs/mcai-1.1.0.jar
+# 服务端模组：产物 build/libs/mcai-1.1.1.jar
 ./gradlew build
 
-# 客户端模组：产物 client/build/libs/mcai-client-1.1.0.jar
+# 客户端模组：产物 client/build/libs/mcai-client-1.1.1.jar
 cd client && ./gradlew build
 ```
 

@@ -58,11 +58,13 @@ public final class AiCommandHandler {
                         .then(Commands.argument("message", StringArgumentType.greedyString())
                                 .executes(context -> screenshotCommand(context, StringArgumentType.getString(context, "message")))))
                 // 新：本地文件（路径 + 消息都必填）
+                // 路径和消息合成一个 greedy 参数自己解析：Brigadier 的 StringArgumentType.string()
+                // 会把 Windows 路径里的 \U 当成非法转义序列直接报错；greedyString 原样收下整段文本，
+                // 由 fileCommand 再拆分（支持 "C:\Users\me\a.md" 这种写法，不需要双反斜杠）。
                 .then(Commands.literal("file")
                         .executes(AiCommandHandler::extendedUsage)
-                        .then(Commands.argument("path", StringArgumentType.string())
-                                .then(Commands.argument("message", StringArgumentType.greedyString())
-                                        .executes(AiCommandHandler::fileCommand))))
+                        .then(Commands.argument("raw", StringArgumentType.greedyString())
+                                .executes(AiCommandHandler::fileCommand)))
                 // 旧格式兜底：必须最后注册，literal 优先
                 .then(Commands.argument("text", StringArgumentType.greedyString())
                         .executes(AiCommandHandler::legacyCommand)));
@@ -82,7 +84,10 @@ public final class AiCommandHandler {
         context.getSource().sendSuccess(
                 () -> Component.literal("旧格式 /ai <内容> 仍然可用").withStyle(ChatFormatting.DARK_GRAY), false);
         context.getSource().sendSuccess(
-                () -> Component.literal("文件路径要用引号：/ai file \"C:/Users/me/笔记.txt\" 帮我看看；Windows 反斜杠写两个或直接用 /")
+                () -> Component.literal("文件路径：/ai file \"C:\\Users\\me\\笔记.txt\" 帮我看看（路径有空格要加引号，反斜杠直接写）")
+                        .withStyle(ChatFormatting.DARK_GRAY), false);
+        context.getSource().sendSuccess(
+                () -> Component.literal("路径不加引号也行（不能有空格）：/ai file C:/Users/me/a.md 帮我看看")
                         .withStyle(ChatFormatting.DARK_GRAY), false);
         return 0;
     }
@@ -159,10 +164,34 @@ public final class AiCommandHandler {
         if (!ensureEnabled(player)) {
             return 0;
         }
-        String path = StringArgumentType.getString(context, "path").trim();
-        String message = StringArgumentType.getString(context, "message").trim();
+        // raw = "<本地路径>" <消息> 或 本地路径 <消息>（greedy 参数，原样收下，不经过 Brigadier 转义解析）
+        String raw = StringArgumentType.getString(context, "raw").trim();
+        String path;
+        String message;
+        if (raw.startsWith("\"")) {
+            int close = raw.indexOf('"', 1);
+            if (close < 0) {
+                context.getSource().sendFailure(Component.literal("路径的引号没有闭合。"));
+                return 0;
+            }
+            path = raw.substring(1, close).trim();
+            message = raw.substring(close + 1).trim();
+        } else {
+            int space = raw.indexOf(' ');
+            if (space < 0) {
+                path = raw;
+                message = "";
+            } else {
+                path = raw.substring(0, space).trim();
+                message = raw.substring(space + 1).trim();
+            }
+        }
         if (path.isEmpty()) {
             context.getSource().sendFailure(Component.literal("路径不能为空。"));
+            return 0;
+        }
+        if (message.isEmpty()) {
+            context.getSource().sendFailure(Component.literal("用法：/ai file <本地路径> <消息>（路径有空格时用引号包起来）"));
             return 0;
         }
         if (!ensureNotRateLimited(player)) {
