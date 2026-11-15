@@ -1,4 +1,4 @@
-# mcai ↔ DSH 协议（mod 1.1.0 / 插件 dsh-mc-server-ops ≥ 0.6.0）
+# mcai ↔ DSH 协议（mod 1.2.0 / 插件 dsh-mc-server-ops ≥ 0.6.3）
 
 mod 把游戏内 `/ai` 请求 POST 到 DSH 插件监听的本机地址（默认 `http://127.0.0.1:8765/mc-ai`）。
 
@@ -22,7 +22,7 @@ mod 把游戏内 `/ai` 请求 POST 到 DSH 插件监听的本机地址（默认 
 | `player` | 是 | 玩家名，用于日志和 AI 称呼 |
 | `uuid` | 是 | 玩家 UUID；DSH 插件用 `mc-ai:<uuid>` 做独立会话，上下文连续 |
 | `text` | 是（可为空串） | 玩家消息 |
-| `attachments` | 否 | 附件数组，1.1.0 每次最多 1 个 |
+| `attachments` | 否 | 附件数组，每次最多 1 个 |
 
 附件对象：
 
@@ -53,13 +53,43 @@ mod 把游戏内 `/ai` 请求 POST 到 DSH 插件监听的本机地址（默认 
 
 mod 按 `ok` 判断，把 `reply` 或错误提示贴到玩家聊天栏。
 
+## 天气投票配置（插件 → mod，单向文件）
+
+插件 `dsh-mc-server-ops`（≥ 0.6.3）在设置面板保存「游戏内天气投票」后，把配置写到 **服务端目录** `config/mcai-weather.json`；mod 每次 `/weather` 时读取该文件（不存在/坏掉回落到默认值）。
+
+```json
+{
+  "enabled": true,
+  "directThreshold": 2,
+  "approveNeed": 2,
+  "rejectNeed": 1,
+  "timeoutSeconds": 60,
+  "cooldownSeconds": 60,
+  "updatedAt": "2026-11-15T04:55:53.492Z",
+  "managedBy": "dsh-mc-server-ops"
+}
+```
+
+| 字段 | 默认 | 说明 |
+| --- | --- | --- |
+| `enabled` | `true` | 关掉后 `/weather` 只提示「天气功能已被服主关闭」 |
+| `directThreshold` | `2` | 在线 ≤ 这个数时直接改天气；更多人才发起投票 |
+| `approveNeed` | `2` | 通过需要几票同意（发起人自动算 1 票） |
+| `rejectNeed` | `1` | 几票反对就作废 |
+| `timeoutSeconds` | `60` | 投票有效期（秒） |
+| `cooldownSeconds` | `60` | 同一玩家两次发起的最小间隔（秒） |
+
+规则：`/weather clear|rain|thunder [持续秒数]`（所有玩家可用，替换原版需要 OP 的 `/weather`）；在线 ≤ `directThreshold` 直接生效，否则发起 `/vote yes|no|status` 投票。控制台执行不受投票限制。
+
 ## 兼容性
 
-| mod | 插件 | 文字 | 截图/文件附件 |
-| --- | --- | --- | --- |
-| 1.0.x | 0.5.x | ✅ | ❌（无附件协议） |
-| 1.1.0 | 0.5.x | ✅ | ❌ 插件会忽略 `attachments`（不推荐） |
-| 1.1.0 | ≥ 0.6.0 | ✅ | ✅ |
+| mod | 插件 | 文字 | 截图/文件附件 | 天气投票配置 |
+| --- | --- | --- | --- | --- |
+| 1.0.x | 0.5.x | ✅ | ❌（无附件协议） | ❌ |
+| 1.1.0 | 0.5.x | ✅ | ❌ 插件会忽略 `attachments`（不推荐） | ❌ |
+| 1.1.0 | ≥ 0.6.0 | ✅ | ✅ | ❌（mod 无天气指令） |
+| 1.2.0 | ≥ 0.6.3 | ✅ | ✅ | ✅ |
+| 1.2.0 | 0.6.0–0.6.2 | ✅ | ✅ | ⚠️ 无面板配置，mod 用默认值（≤2 人直接、2 票同意） |
 
 ## 客户端 ↔ 服务端（Forge 网络，仅附件）
 

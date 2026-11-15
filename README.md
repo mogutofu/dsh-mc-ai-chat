@@ -2,14 +2,14 @@
 
 在 Minecraft 服务端里加一个 `/ai` 指令：玩家直接和 DeepSeek Harness 上的「小铜」对话。mod 本身不含 AI，只把请求 POST 到本机 DSH 插件 `dsh-mc-server-ops` 提供的 `http://127.0.0.1:8765/mc-ai`，再把回复贴回聊天栏。
 
-从 1.1.0 起拆成**两个模组**：
+从 1.1.0 起拆成**两个模组**；从 1.2.0 起服务端模组还带**游戏内天气投票**（`/weather` + `/vote`）：
 
 | 模组 | modid | 装在哪里 | 说明 |
 | --- | --- | --- | --- |
-| `mcai-server`（本仓库根工程，产物 `mcai-1.1.1.jar`） | `mcai` | **服务端必装** | `/ai` 指令、与 DSH 通信；不装客户端模组时只发文字 |
-| `mcai-client`（本仓库 `client/` 工程，产物 `mcai-client-1.1.1.jar`） | `mcai_client` | **客户端选装** | 让 `/ai screenshot`、`/ai file` 能截图/读本地文件发到服务端 |
+| `mcai-server`（本仓库根工程，产物 `mcai-1.2.0.jar`） | `mcai` | **服务端必装** | `/ai` 指令、与 DSH 通信、`/weather` 天气投票；不装客户端模组时只发文字 |
+| `mcai-client`（本仓库 `client/` 工程，产物 `mcai-client-1.2.0.jar`） | `mcai_client` | **客户端选装** | 让 `/ai screenshot`、`/ai file` 能截图/读本地文件发到服务端 |
 
-> 服务端没装 `dsh-mc-server-ops` 插件的话，mod 能加载但 `/ai` 没有 AI 可聊。插件：<https://github.com/mogutofu/dsh-mc-server-ops>
+> 服务端没装 `dsh-mc-server-ops` 插件的话，mod 能加载但 `/ai` 没有 AI 可聊、天气投票也没法在设置面板里配。插件：<https://github.com/mogutofu/dsh-mc-server-ops>
 
 ## 命令
 
@@ -19,6 +19,8 @@
 | `/ai message <内容>` | 否 | 只发文字给 AI |
 | `/ai screenshot [内容]` | 是 | 截取当前游戏画面，和文字一起发给 AI |
 | `/ai file <路径> <内容>` | 是 | 读取玩家本机文件，和文字一起发给 AI |
+| `/weather clear\|rain\|thunder [持续秒数]` | 否 | 改天气（所有玩家可用，替换原版需要 OP 的 `/weather`） |
+| `/vote yes` / `/vote no` / `/vote status` | 否 | 天气投票（在线人多时用） |
 
 说明：
 
@@ -28,12 +30,35 @@
 - 路径写法（1.1.1 起不用再转义反斜杠）：`/ai file "C:\Users\me\笔记.md" 这个文件是什么`；路径有空格时用引号包起来，没有空格也可以不加引号（`/ai file C:/tmp/a.md 看看这个`）。
 - 服务端侧有每玩家限流（`rateLimitSeconds`，默认 5 秒）。
 
+## 天气投票
+
+1.2.0 起 `/weather` 对**所有玩家**开放（服务端模组会把原版需要 OP 的 `/weather` 换成自己的）：
+
+- 在线玩家 **≤ `directThreshold`（默认 2）**：直接生效，全服提示「XX 把天气改成了下雨」
+- **3 人及以上**：发起投票，发起人自动算 1 票同意；其他人用 `/vote yes` 同意、`/vote no` 反对、`/vote status` 查看
+- 同意达到 `approveNeed`（默认 2）通过；反对达到 `rejectNeed`（默认 1）作废；`timeoutSeconds`（默认 60 秒）没结果也会作废
+- 同一玩家两次发起间隔 `cooldownSeconds`（默认 60 秒）
+- 控制台（RCON）执行 `/weather` 不受投票限制，直接生效
+
+配置不在 `mcai-common.toml` 里，而是由 DSH 插件 `dsh-mc-server-ops` 的设置面板写到服务端目录 `config/mcai-weather.json`，mod **每次 `/weather` 时读取**，所以改完即时生效、不用重启。字段：
+
+```json
+{
+  "enabled": true,
+  "directThreshold": 2,
+  "approveNeed": 2,
+  "rejectNeed": 1,
+  "timeoutSeconds": 60,
+  "cooldownSeconds": 60
+}
+```
+
 ## 安装
 
-1. 服务端 `mods/` 放 `mcai-1.1.1.jar`；可选：客户端 `mods/` 放 `mcai-client-1.1.1.jar`。
-2. 服务端装好 DSH 与 `dsh-mc-server-ops` 插件（≥ 0.6.0 才支持附件），并保持 `/mc-ai` 监听（默认 `127.0.0.1:8765`）。
+1. 服务端 `mods/` 放 `mcai-1.2.0.jar`；可选：客户端 `mods/` 放 `mcai-client-1.2.0.jar`。
+2. 服务端装好 DSH 与 `dsh-mc-server-ops` 插件（≥ 0.6.3 才支持天气投票配置面板；≥ 0.6.0 才支持附件），并保持 `/mc-ai` 监听（默认 `127.0.0.1:8765`）。
 3. 重启服务器；首次启动生成 `config/mcai-common.toml`。
-4. 游戏内 `/ai 你好`。
+4. 游戏内 `/ai 你好`，或 `/weather rain` 试试天气。
 
 ## 配置（`config/mcai-common.toml`）
 
@@ -44,22 +69,25 @@
 | `enabled` | `true` | 关闭后 `/ai` 只提示「AI 未开启」 |
 | `rateLimitSeconds` | `5` | 同一玩家两次请求最小间隔，`0` 不限 |
 
+天气投票配置见上面的 `config/mcai-weather.json`（由 DSH 插件设置面板写入）。
+
 ## 工作方式
 
 - 服务端模组把玩家的 `玩家名`、`UUID`、`文字`、以及可选附件（base64）POST 到本机 DSH。
 - 附件协议见 [PROTOCOL.md](PROTOCOL.md)：每次最多 1 个附件；截图 PNG ≤ 8MB，文件 ≤ 16MB。
 - 客户端 ↔ 服务端走 Forge `mcai:net` 通道（协议版本 `"1"`），附件按 24KB 分块传输（1.20.1 单包上限 32767 字节）。
 - 图片附件由 DSH 交给模型直接看图；文本类小文件会内联进消息，其它文件落盘后把只读路径告诉 AI（由 DSH 负责）。
+- 天气投票完全在服务端生效，不经过 DSH、不消耗 token；只有配置从 DSH 插件写文件过来。
 
 ## 从源码构建
 
 需要 **JDK 17**（Forge 1.20.1 要求）和 Gradle 8.1.1（仓库自带 wrapper）。
 
 ```bash
-# 服务端模组：产物 build/libs/mcai-1.1.1.jar
+# 服务端模组：产物 build/libs/mcai-1.2.0.jar
 ./gradlew build
 
-# 客户端模组：产物 client/build/libs/mcai-client-1.1.1.jar
+# 客户端模组：产物 client/build/libs/mcai-client-1.2.0.jar
 cd client && ./gradlew build
 ```
 
@@ -67,7 +95,7 @@ cd client && ./gradlew build
 
 ## FAQ
 
-**客户端没装会怎样？** 服务端照常工作，`/ai`、`/ai message` 正常；`/ai screenshot`、`/ai file` 降级为只发文字并提示。
+**客户端没装会怎样？** 服务端照常工作，`/ai`、`/ai message`、`/weather`、`/vote` 正常；`/ai screenshot`、`/ai file` 降级为只发文字并提示。
 
 **客户端装了、服务器没装服务端模组？** 客户端模组的依赖声明要求服务器有 `mcai >= 1.1.0`（`side="SERVER"`），缺了会被 Forge 连接检查拦下。
 
@@ -75,7 +103,9 @@ cd client && ./gradlew build
 
 **文件会存到哪里？** 玩家本地文件只在客户端读取并发送字节；服务端只转发给本机 DSH。DSH 侧文本类小文件内联给模型，其余落盘到 DSH 的 attachments 存储（不会自动删除）。
 
-**和 QQ 群有什么关系？** 本 mod 只服务游戏内 `/ai`；QQ 群那边的服务器管理/群服互通是 DSH 插件 `dsh-mc-server-ops` 的功能。
+**天气投票的配置在哪改？** DSH 插件 `dsh-mc-server-ops` 的设置面板 →「游戏内天气投票」；保存后写入服务端 `config/mcai-weather.json`，mod 每次 `/weather` 都读，立刻生效。也可以直接改这个 JSON，但插件下次保存会覆盖。
+
+**和 QQ 群有什么关系？** 本 mod 只服务游戏内 `/ai` 和 `/weather`；QQ 群那边的服务器管理/群服互通是 DSH 插件 `dsh-mc-server-ops` 的功能。
 
 ## License
 

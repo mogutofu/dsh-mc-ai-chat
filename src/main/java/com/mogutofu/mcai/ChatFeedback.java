@@ -24,6 +24,15 @@ public final class ChatFeedback {
         notice(player, "正在输入…", ChatFormatting.DARK_GRAY);
     }
 
+    /** 全服广播（在线 0 人也安全）：给天气投票用。 */
+    public static void broadcast(MinecraftServer server, String text, ChatFormatting color) {
+        if (server == null || text == null || text.isEmpty()) {
+            return;
+        }
+        server.getPlayerList().broadcastSystemMessage(
+                Component.literal("[天气] " + text).withStyle(color), false);
+    }
+
     /**
      * 附件链路失败时的降级：提示原因，消息非空就退回旧版纯文本请求。
      */

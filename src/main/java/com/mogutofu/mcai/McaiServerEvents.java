@@ -23,6 +23,7 @@ public final class McaiServerEvents {
         if (event.getEntity() instanceof ServerPlayer player) {
             ClientPresence.remove(player.getUUID());
             PendingTransfers.onPlayerLogout(player.getUUID());
+            WeatherCommandHandler.onPlayerLogout(player.getUUID());
         }
     }
 
@@ -30,6 +31,7 @@ public final class McaiServerEvents {
     public static void onServerTick(TickEvent.ServerTickEvent event) {
         if (event.phase == TickEvent.Phase.END) {
             PendingTransfers.onServerTick();
+            WeatherCommandHandler.onServerTick();
         }
     }
 
@@ -37,5 +39,6 @@ public final class McaiServerEvents {
     public static void onServerStopping(ServerStoppingEvent event) {
         PendingTransfers.clear();
         ClientPresence.clear();
+        WeatherCommandHandler.onServerStopping();
     }
 }

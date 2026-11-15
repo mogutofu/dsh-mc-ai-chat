@@ -2,6 +2,13 @@
 
 版本号对应 git tag `vX.Y.Z`。
 
+## 1.2.0 — 2026-11-15
+
+- feat: 游戏内天气投票——玩家用 `/weather clear|rain|thunder [持续秒数]` 改天气（替换原版需要 OP 的 `/weather`）；在线 ≤ `directThreshold`（默认 2）直接生效，3 人及以上发起投票
+- feat: 新增 `/vote yes` / `/vote no` / `/vote status`；发起人自动算 1 票同意，默认 2 票通过、1 票反对作废、60 秒超时、60 秒发起冷却；控制台不受限
+- feat: 读取 DSH 插件写入的 `config/mcai-weather.json`（每次都读，改配置即时生效）；文件缺失/损坏回落到默认值
+- chore: 客户端模组同步升到 1.2.0（功能不变）
+
 ## 1.1.1 — 2026-11-08
 
 - fix: `/ai file` 在引号里直接写 Windows 路径（如 `"C:\Users\me\a.md"`）会报「引号内的字符串包含无效的转义序列」；改为 greedy 参数自行解析，**反斜杠不用转义**，带空格的路径照常加引号即可
