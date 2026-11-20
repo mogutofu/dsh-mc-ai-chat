@@ -24,6 +24,8 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.1.1'
+      - name: Make Gradle wrappers executable
+        run: chmod +x gradlew client/gradlew
       - name: Build server mod
         run: ./gradlew build --no-daemon --console=plain
       - name: Build client mod
