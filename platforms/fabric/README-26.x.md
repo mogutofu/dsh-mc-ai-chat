@@ -113,5 +113,6 @@ gradle build --no-daemon -Pmc=26.3 -Pfabric_api=0.166.2+26.3
   拿不到就当普通玩家（OP 会多走一次投票，不会崩）。
 - **无内置服务端附件支持**（见上）。客户端 `environment: client`，服务端 `environment: server`，
   两个 jar 不能同时装在同一客户端（服务端 jar 在客户端本来也不会加载）。
-- 客户端截图用 `Screenshot.takeScreenshot(GameRenderer#mainRenderTarget())` + `NativeImage.asByteArray()`；
-  如果 26.x 再去掉这两个 API，改 `ClientAttachmentTransfer#captureScreenshot` 一处即可。
+- 客户端截图用 26.x 的回调式 `Screenshot.takeScreenshot(GameRenderer#mainRenderTarget(), Consumer<NativeImage>)`
+  + `NativeImage.writeToFile(Path)`（先落临时 PNG 再读字节，因为 `asByteArray()` 在 26.x 已删除）；
+  如果 26.x 再去掉这些 API，改 `ClientAttachmentTransfer#captureScreenshot` 一处即可。

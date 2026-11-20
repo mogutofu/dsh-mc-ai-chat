@@ -12,6 +12,8 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.Screenshot;
 import net.minecraft.network.chat.Component;
 
+import java.io.File;
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
@@ -24,8 +26,8 @@ import java.util.UUID;
  * 收到 AttachmentRequest 后真正干活的地方（客户端主线程）。
  *
  * <ol>
- *   <li>截图：{@code Screenshot.takeScreenshot(getMainRenderTarget())} 拿 NativeImage，
- *       {@code asByteArray()} 得到 PNG 字节，close 掉 NativeImage；</li>
+ *   <li>截图：{@code Screenshot.takeScreenshot(GameRenderer#mainRenderTarget(), Consumer&lt;NativeImage&gt;)}
+ *       拿 NativeImage，{@code writeToFile} 先落成临时 PNG 再读回字节，然后 close 掉 NativeImage；</li>
  *   <li>文件：先 {@code Files.size} 校验上限再 {@code Files.readAllBytes}；</li>
  *   <li>按 24KB 分块发 AttachmentChunk，失败发 AttachmentAbort。</li>
  * </ol>
@@ -74,30 +76,57 @@ public final class ClientAttachmentTransfer {
 
     // ── 截图 ──────────────────────────────────────────────────────────
 
-    private static void captureScreenshot(Minecraft minecraft, AttachmentRequestPayload request) throws Exception {
-        // 26.x 把 "主渲染目标" 从 Minecraft 挪到了 GameRenderer（getMainRenderTarget -> mainRenderTarget）
-        NativeImage image = Screenshot.takeScreenshot(minecraft.gameRenderer.mainRenderTarget());
-        if (image == null) {
-            abort(request.transferId(), "截图失败：没有拿到画面");
-            return;
-        }
-        byte[] data;
+    private static void captureScreenshot(Minecraft minecraft, AttachmentRequestPayload request) {
+        // 26.x：主渲染目标从 Minecraft 挪到 GameRenderer；截图改成回调式
+        // Screenshot.takeScreenshot(rt, Consumer<NativeImage>)，NativeImage 也没有 asByteArray() 了，
+        // 所以先 writeToFile 落成临时 PNG 再读字节（临时文件用完就删）。
+        // 这里已经在客户端主线程（payload handler 里 execute 过），回调直接同步执行；
+        // 万一它异步回调也没关系，全程不阻塞等待。
         try {
-            data = image.asByteArray();
+            Screenshot.takeScreenshot(minecraft.gameRenderer.mainRenderTarget(), image -> {
+                if (image == null) {
+                    abort(request.transferId(), "截图失败：没有拿到画面");
+                    return;
+                }
+                try {
+                    byte[] data = readPng(image);
+                    if (data.length <= 0) {
+                        abort(request.transferId(), "截图失败：PNG 数据为空");
+                        return;
+                    }
+                    if (data.length > request.maxBytes()) {
+                        abort(request.transferId(), "截图超过 " + Protocol.megabytes(request.maxBytes())
+                                + " 限制（" + data.length + " 字节）");
+                        return;
+                    }
+                    McaiClientFabric.LOGGER.info("[mcai-client] 已截图 {} 字节", data.length);
+                    sendChunks(request.transferId(), data, "screenshot.png", "image/png", true);
+                } catch (Throwable error) {
+                    McaiClientFabric.LOGGER.warn("[mcai-client] 截图失败", error);
+                    abort(request.transferId(), describe(error));
+                } finally {
+                    image.close();
+                }
+            });
+        } catch (Throwable error) {
+            McaiClientFabric.LOGGER.warn("[mcai-client] 截图失败", error);
+            abort(request.transferId(), describe(error));
+        }
+    }
+
+    /** NativeImage -> PNG 字节：26.x 只剩 writeToFile，先写临时文件再读回来。 */
+    private static byte[] readPng(NativeImage image) throws IOException {
+        File tmp = File.createTempFile("mcai-screenshot", ".png");
+        try {
+            image.writeToFile(tmp.toPath());
+            return Files.readAllBytes(tmp.toPath());
         } finally {
-            image.close();
+            try {
+                Files.deleteIfExists(tmp.toPath());
+            } catch (IOException ignored) {
+                // 删不掉无所谓，系统临时目录会清
+            }
         }
-        if (data == null || data.length <= 0) {
-            abort(request.transferId(), "截图失败：PNG 数据为空");
-            return;
-        }
-        if (data.length > request.maxBytes()) {
-            abort(request.transferId(), "截图超过 " + Protocol.megabytes(request.maxBytes())
-                    + " 限制（" + data.length + " 字节）");
-            return;
-        }
-        McaiClientFabric.LOGGER.info("[mcai-client] 已截图 {} 字节", data.length);
-        sendChunks(request.transferId(), data, "screenshot.png", "image/png", true);
     }
 
     // ── 本地文件 ──────────────────────────────────────────────────────
