@@ -47,40 +47,62 @@ jobs:
           unzip -p platforms/forge-1.12.2/server/build/libs/mc-ai-forge-1_12_2-v1_3_0.jar mcmod.info | head -20
           unzip -p platforms/forge-1.12.2/client/build/libs/mc-ai-client-forge-1_12_2-v1_3_0.jar mcmod.info | head -20
 
-      # 运行级烟测：临时装一个 Forge 1.12.2 专用服务器，把两个 jar 丢进 mods，确认真的加载成功。
-      # 只做验证，失败不拦构建（产物照样上传），日志在 job 输出里。
+      # 运行级烟测：临时装一个 Forge 1.12.2 专用服务器，把两个 jar 丢进 mods，
+      # 真起一次服确认 mod 加载 + /ai /weather /vote 注册。判定不过就红，日志整份上传。
       - name: 运行级烟测（专用服务器加载 mod）
-        continue-on-error: true
         run: |
-          set -x
+          set -euxo pipefail
           mkdir -p smoke && cd smoke
           curl -sSL -o forge-installer.jar "https://maven.minecraftforge.net/net/minecraftforge/forge/1.12.2-14.23.5.2847/forge-1.12.2-14.23.5.2847-installer.jar"
           java -jar forge-installer.jar --installServer
+          SERVER_JAR=$(ls forge-1.12.2-14.23.5.2847-universal.jar)
+          echo "server jar: $SERVER_JAR"
           echo "eula=true" > eula.txt
-          printf 'online-mode=false\nserver-port=25599\nlevel-name=world\nmax-tick-time=-1\n' > server.properties
+          printf 'online-mode=false\nserver-port=25599\nmax-tick-time=-1\n' > server.properties
           mkdir -p mods
           cp ../platforms/forge-1.12.2/server/build/libs/mc-ai-forge-1_12_2-v1_3_0.jar mods/
           cp ../platforms/forge-1.12.2/client/build/libs/mc-ai-client-forge-1_12_2-v1_3_0.jar mods/
-          nohup java -Xmx2G -jar forge-1.12.2-14.23.5.2847.jar nogui > server.log 2>&1 &
-          for i in $(seq 1 48); do
+          nohup java -Xmx2G -jar "$SERVER_JAR" nogui > server.log 2>&1 &
+          for i in $(seq 1 24); do
             grep -q 'Done (' server.log && break
-            pgrep -f 'forge-1.12.2-14.23.5.2847.jar' > /dev/null || break
             sleep 5
           done
-          sleep 5
-          pkill -f 'forge-1.12.2-14.23.5.2847.jar' || true
+          pkill -f 'forge-1.12.2-14.23.5.2847-universal.jar' || true
           sleep 2
           echo '===== mcai 相关日志 ====='
-          grep -nE '\[mcai|mcai-client|Done \(|Forge Mod Loader has|ERROR|Exception' server.log | head -80 || true
+          grep -E '\[mcai' server.log || true
           echo '===== 判定 ====='
-          grep -q '\[mcai\] 已注册 /ai、/weather、/vote' server.log && echo SMOKE_COMMANDS_REGISTERED || echo SMOKE_COMMANDS_MISSING
-          grep -q '\[mcai\] 已替换原版 /weather' server.log && echo SMOKE_WEATHER_REPLACED || echo SMOKE_WEATHER_NOT_REPLACED
-          grep -q '\[mcai-client\] 当前不是客户端环境' server.log && echo SMOKE_CLIENT_SKIPPED_ON_SERVER || echo SMOKE_CLIENT_SKIP_UNKNOWN
+          if ! grep -q 'Done (' server.log; then
+            echo 'SMOKE_FAIL: 服务器没起到 Done ('
+            tail -100 server.log
+            exit 1
+          fi
+          if ! grep -q '\[mcai\] 已注册 /ai、/weather、/vote' server.log; then
+            echo 'SMOKE_FAIL: 没看到 /ai /weather /vote 注册日志'
+            exit 1
+          fi
+          if ! grep -q '\[mcai\] 已替换原版 /weather' server.log; then
+            echo 'SMOKE_FAIL: 没看到替换原版 /weather 的日志'
+            exit 1
+          fi
+          if grep -qE '\[(ERROR|FATAL)\] \[mcai' server.log; then
+            echo 'SMOKE_FAIL: mcai 打了 ERROR/FATAL'
+            exit 1
+          fi
+          echo 'SMOKE_OK: 专服启动完成并加载 mcai（/ai、/weather、/vote 已注册，原版 /weather 已替换）'
 
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: mcai-forge-1.12.2
           path: |
             platforms/forge-1.12.2/server/build/libs/*.jar
             platforms/forge-1.12.2/client/build/libs/*.jar
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mcai-forge-1.12.2-smoke-log
+          path: smoke/server.log
           if-no-files-found: error
