@@ -1,6 +1,6 @@
 # mcai —— NeoForge 26.x（MC 26.1 / 26.2 / 26.3）双端工程
 
-`platforms/neoforge-26.x/` 是 mcai 1.3.0 的 NeoForge 26.x 实现：一个 Gradle 工程，
+`platforms/neoforge-26.x/` 是 mcai 1.4.0 的 NeoForge 26.x 实现：一个 Gradle 工程，
 用 `-Pmc=` / `-Pneo=` 切版本，一次产出两个 jar（服务端 `mcai`、客户端 `mcai_client`）。
 
 ```
@@ -24,8 +24,8 @@ ModDevGradle 2.0.148 + NeoForge 版本号即可，代码里直接用 `net.minecr
 
 | jar | modId | 文件名 |
 | --- | --- | --- |
-| 服务端 | `mcai` | `mc-ai-neoforge-26_1-v1_3_0.jar` / `…-26_2-…` / `…-26_3-…` |
-| 客户端 | `mcai_client` | `mc-ai-client-neoforge-26_1-v1_3_0.jar` / … |
+| 服务端 | `mcai` | `mc-ai-neoforge-26_1-v1_4_0.jar` / `…-26_2-…` / `…-26_3-…` |
+| 客户端 | `mcai_client` | `mc-ai-client-neoforge-26_1-v1_4_0.jar` / … |
 
 CI 上传 `platforms/neoforge-26.x/build/libs/*.jar`（根工程会把两个子工程的 jar 收进来）。
 

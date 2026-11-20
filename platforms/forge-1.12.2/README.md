@@ -44,8 +44,8 @@ platforms/forge-1.12.2/
 
 | 文件 | modId | 说明 |
 | --- | --- | --- |
-| `mc-ai-forge-1_12_2-v1_3_0.jar` | `mcai` | 服务端模组，丢进服务端 `mods/` |
-| `mc-ai-client-forge-1_12_2-v1_3_0.jar` | `mcai_client` | 纯客户端（`clientSideOnly = true`），丢进客户端 `mods/` |
+| `mc-ai-forge-1_12_2-v1_4_0.jar` | `mcai` | 服务端模组，丢进服务端 `mods/` |
+| `mc-ai-client-forge-1_12_2-v1_4_0.jar` | `mcai_client` | 纯客户端（`clientSideOnly = true`），丢进客户端 `mods/` |
 
 ## 功能
 

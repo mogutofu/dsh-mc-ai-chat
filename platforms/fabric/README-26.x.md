@@ -1,4 +1,4 @@
-# mc-ai · Fabric 26.x 移植说明（1.3.0）
+# mc-ai · Fabric 26.x 移植说明（1.4.0）
 
 本目录是 mcai 的 Fabric 26.x 实现，**一个 Gradle 工程产出两个 jar**：服务端 `mcai` +
 可选客户端 `mcai_client`，MC 26.1 / 26.2 / 26.3 各一对（矩阵在 CI 里跑）。
@@ -11,9 +11,9 @@
 
 | 版本 | 服务端 | 客户端 |
 | --- | --- | --- |
-| MC 26.1 | `mc-ai-fabric-26_1-v1_3_0.jar` | `mc-ai-client-fabric-26_1-v1_3_0.jar` |
-| MC 26.2 | `mc-ai-fabric-26_2-v1_3_0.jar` | `mc-ai-client-fabric-26_2-v1_3_0.jar` |
-| MC 26.3 | `mc-ai-fabric-26_3-v1_3_0.jar` | `mc-ai-client-fabric-26_3-v1_3_0.jar` |
+| MC 26.1 | `mc-ai-fabric-26_1-v1_4_0.jar` | `mc-ai-client-fabric-26_1-v1_4_0.jar` |
+| MC 26.2 | `mc-ai-fabric-26_2-v1_4_0.jar` | `mc-ai-client-fabric-26_2-v1_4_0.jar` |
+| MC 26.3 | `mc-ai-fabric-26_3-v1_4_0.jar` | `mc-ai-client-fabric-26_3-v1_4_0.jar` |
 
 - 服务端 jar：mod id `mcai`，`environment: "server"`，入口 `com.mogutofu.mcai.fabric.McaiFabric`。
 - 客户端 jar：mod id `mcai_client`，`environment: "client"`，入口 `com.mogutofu.mcai.client.McaiClientFabric`。

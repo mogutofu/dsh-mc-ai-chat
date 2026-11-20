@@ -1,11 +1,11 @@
 # mcai — NeoForge 1.21.1 版
 
-`mcai` 1.3.0 的 NeoForge 1.21.1 实现，产出两个互相独立的 mod jar：
+`mcai` 1.4.0 的 NeoForge 1.21.1 实现，产出两个互相独立的 mod jar：
 
 | 文件 | modId | 说明 |
 | --- | --- | --- |
-| `mc-ai-neoforge-1_21_1-v1_3_0.jar` | `mcai` | 服务端必装：`/ai`、`/weather`、`/vote`，以及附件协议的服务端一半 |
-| `mc-ai-client-neoforge-1_21_1-v1_3_0.jar` | `mcai_client` | 客户端选装：让 `/ai screenshot`、`/ai file` 把画面/本地文件发给 AI |
+| `mc-ai-neoforge-1_21_1-v1_4_0.jar` | `mcai` | 服务端必装：`/ai`、`/weather`、`/vote`，以及附件协议的服务端一半 |
+| `mc-ai-client-neoforge-1_21_1-v1_4_0.jar` | `mcai_client` | 客户端选装：让 `/ai screenshot`、`/ai file` 把画面/本地文件发给 AI |
 
 ## 支持的版本
 
@@ -16,9 +16,9 @@
 
 ## 安装
 
-1. 服务端：把 `mc-ai-neoforge-1_21_1-v1_3_0.jar` 放进 `mods/`，启动一次服务器。
+1. 服务端：把 `mc-ai-neoforge-1_21_1-v1_4_0.jar` 放进 `mods/`，启动一次服务器。
    首次启动会生成 `config/mcai-common.json`（endpoint/timeoutSeconds/enabled/rateLimitSeconds）。
-2. 客户端（可选）：把 `mc-ai-client-neoforge-1_21_1-v1_3_0.jar` 放进玩家自己的 `mods/`。
+2. 客户端（可选）：把 `mc-ai-client-neoforge-1_21_1-v1_4_0.jar` 放进玩家自己的 `mods/`。
    不装也能进服，只是 `/ai screenshot`、`/ai file` 会降级成只发文字并提示
    `客户端未安装 mcai-client`。
 3. 服务端还需要在本机跑 DSH 及 `dsh-mc-server-ops` 插件（监听默认
