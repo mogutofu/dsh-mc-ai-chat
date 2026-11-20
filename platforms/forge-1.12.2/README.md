@@ -126,6 +126,30 @@ Gradle 版本由 `gradle/actions/setup-gradle@v4` 的 `gradle-version` 指定。
 | 客户端 hello 时机 | `ClientPlayerNetworkEvent.LoggingIn` | `ClientTickEvent` 里等 `Minecraft.player` 出现 |
 | 截图 | `Screenshot.takeScreenshot` + `NativeImage` | `GL11.glReadPixels` + `ImageIO` |
 
+## 自测（CI 里真跑）
+
+`build-forge-1122.yml` 在编译打包之后会做一次**运行级烟测**：下载 Forge 1.12.2 安装器装一个
+临时专用服务器，把两个 jar 丢进 `mods/`，真启动一次，然后校验：
+
+- 服务器起到 `Done (`；
+- `[mcai] Minecraft AI Chat 已加载`、`[mcai] 已注册网络通道 mcai:net（协议 1）`；
+- `[mcai] 已替换原版 /weather`、`[mcai] 已注册 /ai、/weather、/vote`；
+- `[mcai]` 没有 ERROR/FATAL。
+
+判定不过直接红，`smoke/server.log` 作为 artifact `mcai-forge-1.12.2-smoke-log` 上传。
+
+已实测（2026-11-20，ubuntu-latest + temurin 8）：
+
+```
+[mcai] Minecraft AI Chat 已加载，/ai 指令准备就绪
+[mcai] 已注册网络通道 mcai:net（协议 1）
+[FML] Disabling mod mcai_client it is client side only.     ← 客户端 jar 放进服务端会被跳过
+[09:52] [Server thread/INFO] [mcai]: [mcai] 已替换原版 /weather（原版需要 OP，现在普通玩家也能发起天气投票）
+[mcai] 已注册 /ai、/weather、/vote（游戏内天气投票）
+Forge Mod Loader has successfully loaded 5 mods
+Done (3.534s)! For help, type "help" or "?"
+```
+
 ## 已知限制 / 注意
 
 - 附件只在**专用服务器**上启用（与 1.20.1 一致）：单机/局域网里服务端那半跑在客户端 JVM 里，
@@ -134,4 +158,7 @@ Gradle 版本由 `gradle/actions/setup-gradle@v4` 的 `gradle-version` 指定。
   改协议要同时改服务端 `net/` 与客户端 `net/` 两份 `NetProtocol`。
 - `MessageSources` 按「字段类型是 `EntityPlayerMP`」从 `NetHandlerPlayServer` 找发包玩家，
   不写死字段名（开发环境叫 `player`、生产环境是 srg 名），避免重混淆后取不到。
-- 没做运行级烟测（本机无 JDK 8 / 无 Forge 网络），CI 只做编译 + 打包验证。
+- 截图/文件附件这条链路只做了编译 + 元数据校验，没在真客户端里跑过（CI 起不了图形客户端）；
+  服务端侧的加载、指令注册、原版 `/weather` 替换是实跑验证过的。
+- 聊天栏里没有补 `assets/mcai/lang/en_us.lang`，专用服务器启动时 FML 会为它打一条
+  `Missing English translation for mcai` 的 WARN（无功能影响）。
