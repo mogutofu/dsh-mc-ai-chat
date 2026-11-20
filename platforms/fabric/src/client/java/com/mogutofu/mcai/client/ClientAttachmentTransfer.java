@@ -5,6 +5,7 @@ import com.mogutofu.mcai.client.net.AttachmentChunkPayload;
 import com.mogutofu.mcai.client.net.AttachmentRequestPayload;
 import com.mogutofu.mcai.client.net.AttachmentTooLargePayload;
 import com.mogutofu.mcai.client.net.Protocol;
+import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.platform.NativeImage;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.minecraft.ChatFormatting;
@@ -77,13 +78,14 @@ public final class ClientAttachmentTransfer {
     // ── 截图 ──────────────────────────────────────────────────────────
 
     private static void captureScreenshot(Minecraft minecraft, AttachmentRequestPayload request) {
-        // 26.x：主渲染目标从 Minecraft 挪到 GameRenderer；截图改成回调式
-        // Screenshot.takeScreenshot(rt, Consumer<NativeImage>)，NativeImage 也没有 asByteArray() 了，
-        // 所以先 writeToFile 落成临时 PNG 再读字节（临时文件用完就删）。
+        // 26.x：主渲染目标在 26.1 还是 Minecraft#getMainRenderTarget()，26.2+ 搬到了
+        // GameRenderer#mainRenderTarget()；三个版本共用一份源码，用下面的 mainRenderTarget() 探测。
+        // 截图改成回调式 Screenshot.takeScreenshot(rt, Consumer<NativeImage>)，NativeImage
+        // 也没有 asByteArray() 了，所以先 writeToFile 落成临时 PNG 再读字节（临时文件用完就删）。
         // 这里已经在客户端主线程（payload handler 里 execute 过），回调直接同步执行；
         // 万一它异步回调也没关系，全程不阻塞等待。
         try {
-            Screenshot.takeScreenshot(minecraft.gameRenderer.mainRenderTarget(), image -> {
+            Screenshot.takeScreenshot(mainRenderTarget(minecraft), image -> {
                 if (image == null) {
                     abort(request.transferId(), "截图失败：没有拿到画面");
                     return;
@@ -111,6 +113,24 @@ public final class ClientAttachmentTransfer {
         } catch (Throwable error) {
             McaiClientFabric.LOGGER.warn("[mcai-client] 截图失败", error);
             abort(request.transferId(), describe(error));
+        }
+    }
+
+    /**
+     * 取当前主渲染目标：26.1 用 {@code Minecraft#getMainRenderTarget()}，26.2+ 用
+     * {@code GameRenderer#mainRenderTarget()}。反射两种都试，一份源码三版本通用。
+     */
+    private static RenderTarget mainRenderTarget(Minecraft minecraft) {
+        try {
+            return (RenderTarget) Minecraft.class.getMethod("getMainRenderTarget").invoke(minecraft);
+        } catch (Throwable ignored) {
+            // 26.2+ 没有旧访问器，换新的
+        }
+        try {
+            return (RenderTarget) minecraft.gameRenderer.getClass().getMethod("mainRenderTarget")
+                    .invoke(minecraft.gameRenderer);
+        } catch (Throwable broken) {
+            throw new IllegalStateException("找不到主渲染目标（26.x 访问器）", broken);
         }
     }
 
