@@ -1,0 +1,86 @@
+package com.mogutofu.mcai.client;
+
+import com.mogutofu.mcai.client.net.AttachmentAbortPayload;
+import com.mogutofu.mcai.client.net.AttachmentChunkPayload;
+import com.mogutofu.mcai.client.net.AttachmentRequestPayload;
+import com.mogutofu.mcai.client.net.AttachmentTooLargePayload;
+import com.mogutofu.mcai.client.net.ClientHelloPayload;
+import com.mogutofu.mcai.client.net.Protocol;
+import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
+import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
+import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
+import net.minecraft.client.Minecraft;
+
+/**
+ * 客户端侧 mcai:net 的 Fabric 接线。
+ *
+ * <p>只注册客户端需要的方向：C2S 三个（hello/chunk/abort）用于发送，
+ * S2C 两个（request/too_large）用于接收；payload ID 必须与服务端模组一致。</p>
+ */
+public final class ClientNet {
+
+    private static volatile boolean ready;
+
+    private ClientNet() {
+    }
+
+    public static void register() {
+        PayloadTypeRegistry.playC2S().register(ClientHelloPayload.TYPE, ClientHelloPayload.STREAM_CODEC);
+        PayloadTypeRegistry.playC2S().register(AttachmentChunkPayload.TYPE, AttachmentChunkPayload.STREAM_CODEC);
+        PayloadTypeRegistry.playC2S().register(AttachmentAbortPayload.TYPE, AttachmentAbortPayload.STREAM_CODEC);
+        PayloadTypeRegistry.playS2C().register(AttachmentRequestPayload.TYPE, AttachmentRequestPayload.STREAM_CODEC);
+        PayloadTypeRegistry.playS2C().register(AttachmentTooLargePayload.TYPE, AttachmentTooLargePayload.STREAM_CODEC);
+
+        ClientPlayNetworking.registerGlobalReceiver(AttachmentRequestPayload.TYPE, (payload, context) ->
+                context.client().execute(() -> ClientAttachmentTransfer.handle(payload)));
+        ClientPlayNetworking.registerGlobalReceiver(AttachmentTooLargePayload.TYPE, (payload, context) ->
+                context.client().execute(() -> ClientAttachmentTransfer.onTooLarge(payload)));
+
+        // 进服务器时告诉服务端「我装了 mcai-client」；服务器没装服务端模组就什么都不发。
+        ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> sendHello());
+
+        ready = true;
+        McaiClientFabric.LOGGER.info(
+                "[mcai-client] 已注册 Fabric payload mcai:hello/chunk/abort（发）与 mcai:request/too_large（收），协议 {}",
+                Protocol.PROTOCOL_VERSION);
+    }
+
+    private static void sendHello() {
+        try {
+            Minecraft minecraft = Minecraft.getInstance();
+            if (minecraft.getConnection() == null) {
+                return;
+            }
+            if (!ClientPlayNetworking.canSend(ClientHelloPayload.TYPE)) {
+                McaiClientFabric.LOGGER.info("[mcai-client] 服务器没有 mcai 服务端模组，跳过 ClientHello");
+                return;
+            }
+            ClientPlayNetworking.send(new ClientHelloPayload(Protocol.PROTOCOL_VERSION));
+            McaiClientFabric.LOGGER.info("[mcai-client] 已向服务器发送 ClientHello（协议 {}）",
+                    Protocol.PROTOCOL_VERSION);
+        } catch (RuntimeException error) {
+            McaiClientFabric.LOGGER.warn("[mcai-client] 发送 ClientHello 失败：{}", error.toString());
+        }
+    }
+
+    public static boolean isReady() {
+        return ready;
+    }
+
+    public static void sendToServer(ClientHelloPayload payload) {
+        ClientPlayNetworking.send(payload);
+    }
+
+    public static void sendToServer(AttachmentChunkPayload payload) {
+        ClientPlayNetworking.send(payload);
+    }
+
+    public static void sendToServer(AttachmentAbortPayload payload) {
+        ClientPlayNetworking.send(payload);
+    }
+
+    /** 客户端能不能往当前服务器发分块（服务器得装了 mcai 服务端模组）。 */
+    public static boolean canSendChunk() {
+        return ClientPlayNetworking.canSend(AttachmentChunkPayload.TYPE);
+    }
+}

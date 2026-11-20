@@ -1,0 +1,98 @@
+name: build-fabric
+
+on:
+  push:
+    paths:
+      - 'platforms/fabric/**'
+      - 'common/**'
+      - '.github/workflows/build-fabric.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { mc: '26.1', java: '25', suffix: '26_1' }
+          - { mc: '26.2', java: '25', suffix: '26_2' }
+          - { mc: '26.3', java: '25', suffix: '26_3' }
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ matrix.java }}
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '${{ matrix.java }}'
+
+      - name: Set up Gradle 9.8.2
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.8.2'
+
+      - name: Resolve latest stable Fabric API for MC ${{ matrix.mc }}
+        id: fabric_api
+        shell: bash
+        run: |
+          set -euo pipefail
+          MC='${{ matrix.mc }}'
+          MC_RE="${MC//./\\.}"
+          URL='https://maven.fabricmc.net/net/fabricmc/fabric-api/fabric-api/maven-metadata.xml'
+          ok=0
+          for attempt in 1 2 3 4 5; do
+            if curl -sSfL --retry 3 --retry-delay 3 --connect-timeout 20 -o /tmp/fabric-api.xml "$URL"; then
+              ok=1
+              break
+            fi
+            echo "maven-metadata.xml 拉取失败（第 $attempt 次），5 秒后重试"
+            sleep 5
+          done
+          if [ "$ok" != "1" ]; then
+            echo "::error::无法下载 fabric-api 的 maven-metadata.xml"
+            exit 1
+          fi
+          VER="$(grep -oE "<version>[^<]*\\+${MC_RE}</version>" /tmp/fabric-api.xml \
+            | sed -E 's#</?version>##g' \
+            | grep -viE 'alpha|beta|pre|rc|snapshot' \
+            | sort -V \
+            | tail -n1 || true)"
+          if [ -z "$VER" ]; then
+            echo "::error::maven-metadata.xml 里没有 +${MC} 的稳定 fabric-api 版本"
+            grep -oE '<version>[^<]*</version>' /tmp/fabric-api.xml | tail -n 30
+            exit 1
+          fi
+          echo "MC ${MC} 使用 fabric-api ${VER}"
+          echo "fabric_api=${VER}" >> "$GITHUB_OUTPUT"
+
+      - name: Build (MC ${{ matrix.mc }})
+        working-directory: platforms/fabric
+        run: |
+          gradle build --no-daemon --stacktrace \
+            -Pmc=${{ matrix.mc }} \
+            -Pfabric_api=${{ steps.fabric_api.outputs.fabric_api }}
+
+      - name: Show build/libs
+        if: always()
+        working-directory: platforms/fabric
+        run: ls -l build/libs || true
+
+      - name: Upload jars (MC ${{ matrix.mc }})
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mcai-fabric-${{ matrix.mc }}
+          if-no-files-found: error
+          path: |
+            platforms/fabric/build/libs/mc-ai-fabric-${{ matrix.suffix }}-v1_3_0.jar
+            platforms/fabric/build/libs/mc-ai-client-fabric-${{ matrix.suffix }}-v1_3_0.jar
+
+      - name: Upload build logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mcai-fabric-${{ matrix.mc }}-logs
+          if-no-files-found: ignore
+          path: platforms/fabric/build/reports/**
