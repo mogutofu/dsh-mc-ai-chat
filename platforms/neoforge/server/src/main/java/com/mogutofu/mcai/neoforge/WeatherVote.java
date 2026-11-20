@@ -37,6 +37,9 @@ public final class WeatherVote implements WeatherVoteService.Host {
     private static final WeatherVote HOST = new WeatherVote();
     private static final WeatherVoteService SERVICE = new WeatherVoteService(HOST);
 
+    /** 当前正在执行的控制台/玩家指令来源，控制台的天气提示也回给指令执行者（含 RCON）。 */
+    private static CommandSourceStack activeSource;
+
     private WeatherVote() {
     }
 
@@ -84,17 +87,18 @@ public final class WeatherVote implements WeatherVoteService.Host {
     // ── /weather ──────────────────────────────────────────────────────
 
     private static int weatherUsage(CommandContext<CommandSourceStack> context) {
-        return SERVICE.weatherUsage(actorOf(context.getSource()));
+        return withSource(context.getSource(), () -> SERVICE.weatherUsage(actorOf(context.getSource())));
     }
 
     private static int request(CommandContext<CommandSourceStack> context, String type, Integer durationSeconds) {
-        return SERVICE.weather(actorOf(context.getSource()), type, durationSeconds);
+        return withSource(context.getSource(),
+                () -> SERVICE.weather(actorOf(context.getSource()), type, durationSeconds));
     }
 
     // ── /vote ─────────────────────────────────────────────────────────
 
     private static int voteUsage(CommandContext<CommandSourceStack> context) {
-        return SERVICE.voteUsage(actorOf(context.getSource()));
+        return withSource(context.getSource(), () -> SERVICE.voteUsage(actorOf(context.getSource())));
     }
 
     private static int castVote(CommandContext<CommandSourceStack> context, boolean agree) {
@@ -103,7 +107,7 @@ public final class WeatherVote implements WeatherVoteService.Host {
             context.getSource().sendFailure(Component.literal("只有游戏内玩家能投票"));
             return 0;
         }
-        return SERVICE.vote(actorOf(player), agree);
+        return withSource(context.getSource(), () -> SERVICE.vote(actorOf(player), agree));
     }
 
     private static int voteStatus(CommandContext<CommandSourceStack> context) {
@@ -112,7 +116,18 @@ public final class WeatherVote implements WeatherVoteService.Host {
             context.getSource().sendFailure(Component.literal("只有游戏内玩家能投票"));
             return 0;
         }
-        return SERVICE.status(actorOf(player));
+        return withSource(context.getSource(), () -> SERVICE.status(actorOf(player)));
+    }
+
+    /** 同步执行一次天气服务调用，把控制台反馈路由回指令执行者。 */
+    private static int withSource(CommandSourceStack source, java.util.function.IntSupplier action) {
+        CommandSourceStack previous = activeSource;
+        activeSource = source;
+        try {
+            return action.getAsInt();
+        } finally {
+            activeSource = previous;
+        }
     }
 
     // ── 小工具 ────────────────────────────────────────────────────────
@@ -143,6 +158,11 @@ public final class WeatherVote implements WeatherVoteService.Host {
         String line = PREFIX + message;
         if (actor.console) {
             McaiMod.LOGGER.info("[mcai] {}", line);
+            CommandSourceStack source = activeSource;
+            if (source != null && source.getPlayer() == null) {
+                // 控制台（包括 RCON）执行 /weather 时，用法/提示也要回给执行者
+                source.sendSuccess(() -> Component.literal(line).withStyle(ChatFormatting.GRAY), false);
+            }
             return;
         }
         MinecraftServer server = ServerLifecycleHooks.getCurrentServer();

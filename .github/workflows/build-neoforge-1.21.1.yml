@@ -81,27 +81,54 @@ jobs:
         with:
           gradle-version: '9.2.1'
 
-      - name: Run dev server (start-only smoke test)
+      - name: Run dev server (start + command smoke test)
         working-directory: platforms/neoforge/server
         run: |
           set -u
           mkdir -p run
           echo "eula=true" > run/eula.txt
+          # 打开 RCON，烟测脚本用它在控制台执行 /weather、/ai、/vote status
+          {
+            echo "enable-rcon=true"
+            echo "rcon.port=25575"
+            echo "rcon.password=mcai-smoke"
+            echo "online-mode=false"
+          } > run/server.properties
           gradle wrapper --gradle-version 9.2.1 --distribution-type bin --no-daemon
-          # 服务器会一直跑，等它启动完成后由 timeout 收掉
-          timeout -k 15 420 ./gradlew runServer --no-daemon --console=plain > server-run.log 2>&1 || true
+          ./gradlew runServer --no-daemon --console=plain > server-run.log 2>&1 &
+          GPID=$!
+          for i in $(seq 1 200); do
+            if grep -q "RCON running" server-run.log 2>/dev/null; then break; fi
+            if ! kill -0 "$GPID" 2>/dev/null; then break; fi
+            sleep 2
+          done
+          python3 ../tools/rcon-smoke.py | tee rcon-out.txt
+          for i in $(seq 1 60); do
+            if grep -q "Stopping server" server-run.log 2>/dev/null; then break; fi
+            if ! kill -0 "$GPID" 2>/dev/null; then break; fi
+            sleep 2
+          done
+          kill "$GPID" 2>/dev/null || true
+          wait "$GPID" 2>/dev/null || true
           echo "===== STARTUP MARKERS ====="
-          grep -E "Done \(|已注册 /ai|已替换原版 /weather|已注册 mcai:net|Minecraft AI Chat 已加载|Starting minecraft server" server-run.log || true
+          grep -E "Done \(|已注册 /ai|已替换原版 /weather|已注册 mcai:net|Minecraft AI Chat 已加载|RCON running" server-run.log || true
+          echo "===== COMMAND RESPONSES ====="
+          cat rcon-out.txt || true
           echo "===== ASSERTIONS ====="
           grep -q "Minecraft AI Chat 已加载" server-run.log
           grep -q "已注册 /ai、/weather 与 /vote" server-run.log
           grep -q "已注册 mcai:net 附件载荷" server-run.log
           grep -q "Done (" server-run.log
+          grep -qF "用法：/weather clear|rain|thunder" rcon-out.txt
+          grep -qF "用法：/ai <内容>" rcon-out.txt
+          grep -qF "只有游戏内玩家能投票" rcon-out.txt
 
       - name: Upload server log
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: mcai-neoforge-1.21.1-smoke-log
-          path: platforms/neoforge/server/server-run.log
+          path: |
+            platforms/neoforge/server/server-run.log
+            platforms/neoforge/server/rcon-out.txt
           if-no-files-found: warn
