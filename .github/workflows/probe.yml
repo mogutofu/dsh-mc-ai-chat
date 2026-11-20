@@ -1,0 +1,21 @@
+name: probe
+on:
+  workflow_dispatch:
+  push:
+    branches: [ ci-probe ]
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Probe network and versions
+        run: |
+          set -x
+          curl -sS -m 60 -o nf.xml -w "HTTP %{http_code}\n" https://maven.neoforged.net/releases/net/neoforged/neoforge/maven-metadata.xml || true
+          head -c 500 nf.xml || true
+          echo
+          curl -sS -m 60 -o fabric.json -w "HTTP %{http_code}\n" https://meta.fabricmc.net/v2/versions/loader || true
+          head -c 300 fabric.json || true
+          echo
+          java -version
+          git log --oneline -1
