@@ -1,6 +1,7 @@
-# mcai ↔ DSH 协议（mod 1.2.0 / 插件 dsh-mc-server-ops ≥ 0.6.3）
+# mcai ↔ DSH 协议（mod 1.3.0 / 插件 dsh-mc-server-ops ≥ 0.6.3）
 
-mod 把游戏内 `/ai` 请求 POST 到 DSH 插件监听的本机地址（默认 `http://127.0.0.1:8765/mc-ai`）。
+mod / 插件把游戏内 `/ai` 请求 POST 到 DSH 插件监听的本机地址（默认 `http://127.0.0.1:8765/mc-ai`）。
+1.3.0 起所有平台（Forge / NeoForge / Fabric）的 HTTP 请求体完全一致；Bukkit 插件只有文字，不带 `attachments`。
 
 ## 请求
 
@@ -53,9 +54,9 @@ mod 把游戏内 `/ai` 请求 POST 到 DSH 插件监听的本机地址（默认 
 
 mod 按 `ok` 判断，把 `reply` 或错误提示贴到玩家聊天栏。
 
-## 天气投票配置（插件 → mod，单向文件）
+## 天气投票配置（插件 → 平台，单向文件）
 
-插件 `dsh-mc-server-ops`（≥ 0.6.3）在设置面板保存「游戏内天气投票」后，把配置写到 **服务端目录** `config/mcai-weather.json`；mod 每次 `/weather` 时读取该文件（不存在/坏掉回落到默认值）。
+插件 `dsh-mc-server-ops`（≥ 0.6.3）在设置面板保存「游戏内天气投票」后，把配置写到 **服务端目录** `config/mcai-weather.json`；所有平台的 `/weather` 每次读取该文件（不存在/坏掉回落到默认值）。
 
 ```json
 {
@@ -79,20 +80,35 @@ mod 按 `ok` 判断，把 `reply` 或错误提示贴到玩家聊天栏。
 | `timeoutSeconds` | `60` | 投票有效期（秒） |
 | `cooldownSeconds` | `60` | 同一玩家两次发起的最小间隔（秒） |
 
-规则：`/weather clear|rain|thunder [持续秒数]`（所有玩家可用，替换原版需要 OP 的 `/weather`）；在线 ≤ `directThreshold` 直接生效，否则发起 `/vote yes|no|status` 投票。控制台执行不受投票限制。
+规则：`/weather clear|rain|thunder [持续秒数]`（所有玩家可用，替换原版需要 OP 的 `/weather`）；在线 ≤ `directThreshold` 直接生效，否则发起 `/vote yes|no|status` 投票。控制台 / OP 直接执行。
+
+## 服务端 ↔ 客户端附件协议（Forge / NeoForge / Fabric）
+
+各加载器用各自的 payload 注册方式，但消息语义与字段一致：
+
+| 消息 | 方向 | 字段 |
+| --- | --- | --- |
+| `ClientHello` | C→S | `int protocolVersion`（=1） |
+| `AttachmentRequest` | S→C | `UUID transferId`、`byte kind`(0=截图,1=文件)、`String path`、`int maxBytes` |
+| `AttachmentChunk` | C→S | `UUID transferId`、`int chunkIndex`、`int chunkCount`、`String fileName`、`String mediaType`、`boolean image`、`int totalBytes`、`byte[] data` |
+| `AttachmentAbort` | C→S | `UUID transferId`、`String reason` |
+| `AttachmentTooLarge` | S→C | `UUID transferId`、`String reason`（预留，可空实现） |
+
+- 分块：`CHUNK_SIZE = 24 * 1024` 原始字节（24576）；1.20.1 Forge 单包上限 32767 字节，现代 payload 上限更大，统一 24KB 兼容所有平台。
+- 服务端按 `transferId` 收集，校验 `chunkCount`/`totalBytes`，只接受发起玩家；15 秒超时降级。
+- 没有收到 `ClientHello` 视为未安装客户端模组：`/ai screenshot`、`/ai file` 降级为只发文字并提示「客户端未安装 mcai-client」。
+- 通道 / payload 标识：Forge 1.20.1 与 Forge 1.12.2 用单通道 `mcai:net`（SimpleChannel / SimpleImpl，消息按索引区分）；NeoForge 用 5 个 payload：`mcai:client_hello`、`mcai:attachment_request`、`mcai:attachment_chunk`、`mcai:attachment_abort`、`mcai:attachment_too_large`；Fabric 用 5 个 `Identifier`：`mcai:hello`、`mcai:request`、`mcai:chunk`、`mcai:abort`、`mcai:too_large`。协议版本统一 `"1"`。
 
 ## 兼容性
 
-| mod | 插件 | 文字 | 截图/文件附件 | 天气投票配置 |
+| 平台 / 版本 | 插件 | 文字 | 截图/文件附件 | 天气投票 |
 | --- | --- | --- | --- | --- |
-| 1.0.x | 0.5.x | ✅ | ❌（无附件协议） | ❌ |
-| 1.1.0 | 0.5.x | ✅ | ❌ 插件会忽略 `attachments`（不推荐） | ❌ |
-| 1.1.0 | ≥ 0.6.0 | ✅ | ✅ | ❌（mod 无天气指令） |
+| Forge 1.20.1 1.3.0 | ≥ 0.6.3 | ✅ | ✅（Forge 通道） | ✅ |
+| Forge 1.12.2 1.3.0 | ≥ 0.6.3 | ✅ | ✅（SimpleImpl） | ✅ |
+| NeoForge 1.21.1 / 26.x 1.3.0 | ≥ 0.6.3 | ✅ | ✅（NeoForge payload） | ✅ |
+| Fabric 26.x 1.3.0 | ≥ 0.6.3 | ✅ | ✅（Fabric networking） | ✅ |
+| Bukkit 1.3.0 | ≥ 0.6.3 | ✅ | ❌（无客户端附件） | ✅ |
 | 1.2.0 | ≥ 0.6.3 | ✅ | ✅ | ✅ |
-| 1.2.0 | 0.6.0–0.6.2 | ✅ | ✅ | ⚠️ 无面板配置，mod 用默认值（≤2 人直接、2 票同意） |
+| 1.2.0 | 0.6.0–0.6.2 | ✅ | ✅ | ⚠️ 默认值 |
 
-## 客户端 ↔ 服务端（Forge 网络，仅附件）
-
-- 通道：`mcai:net`，协议版本字符串 `"1"`；只在专用服务器（服务端）与客户端（客户端模组）各自注册，避免重复注册。
-- 消息：`ClientHello`（C→S）、`AttachmentRequest`（S→C）、`AttachmentChunk`（C→S，24KB/块）、`AttachmentAbort`（C→S）、`AttachmentTooLarge`（S→C）。
-- 服务端为每个玩家维护一个待传输请求，15 秒超时；无 `ClientHello` 视为未装客户端模组，降级为只发文字。
+插件本身不需要为 1.3.0 改代码：`/mc-ai` 契约未变，已验证 1.2.0/1.3.0 共用。

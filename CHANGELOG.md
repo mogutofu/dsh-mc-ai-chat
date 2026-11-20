@@ -2,6 +2,21 @@
 
 版本号对应 git tag `vX.Y.Z`。
 
+## 1.3.0 — 2026-11-20
+
+- feat: 多平台发布，同一套行为覆盖 Forge / NeoForge / Fabric / Bukkit：
+  - Forge 1.20.1（原有工程）、Forge 1.12.2（旧 SimpleImpl 网络重写，Java 8）
+  - NeoForge 1.21.1、26.1、26.2、26.3
+  - Fabric 26.1、26.2、26.3（Fabric Loader 0.20.1，非 remap）
+  - Bukkit / Spigot / Paper 通用插件（1.20+ / 1.21+ / 26.x，单 jar）
+- feat: 统一产物命名 `mc-ai-<loader>-<mc>-v1_3_0.jar` / `mc-ai-client-<loader>-<mc>-v1_3_0.jar`；Bukkit 为 `mc-ai-bukkit-v1_3_0.jar`
+- feat: 抽出与加载器无关的 `common` 核心（JSON、配置、天气投票状态机、HTTP 客户端、附件模型），所有新平台复用；新增 `tests/WeatherVoteSelfTest.java` 覆盖直接生效/投票通过/否决/OP 与控制台直接/冷却/超时
+- feat: NeoForge / Fabric / Forge 1.12.2 的服务端 + 客户端双模组，保留 `/ai screenshot`、`/ai file` 附件（24KB 分块，截图 ≤8MB、文件 ≤16MB）；无客户端时降级只发文字
+- feat: Bukkit 插件完整实现 `/ai` + `/weather` + `/vote` 天气投票；通过 `PlayerCommandPreprocessEvent` 替换原版 `/weather`，控制台仍走原版直接执行
+- feat: CI（GitHub Actions）分平台构建/矩阵构建，产物名即最终发布名
+- docs: README 安装矩阵、PROTOCOL 多加载器协议说明
+- chore: Forge 1.20.1 升到 1.3.0 并按新规范改名（功能不变）
+
 ## 1.2.0 — 2026-11-15
 
 - feat: 游戏内天气投票——玩家用 `/weather clear|rain|thunder [持续秒数]` 改天气（替换原版需要 OP 的 `/weather`）；在线 ≤ `directThreshold`（默认 2）直接生效，3 人及以上发起投票
