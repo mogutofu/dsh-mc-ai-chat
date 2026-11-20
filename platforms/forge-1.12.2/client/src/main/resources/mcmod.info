@@ -3,7 +3,7 @@
     "modid": "mcai_client",
     "name": "Minecraft AI Chat Client",
     "description": "Optional client companion for Minecraft AI Chat (mcai). It only sends a ClientHello on join and, when the server asks, sends back a screenshot or a local file so that /ai screenshot and /ai file work. Without it the server mod still works and falls back to text-only requests.",
-    "version": "1.3.0",
+    "version": "1.4.0",
     "mcversion": "1.12.2",
     "url": "https://github.com/mogutofu/dsh-mc-ai-chat",
     "updateUrl": "",

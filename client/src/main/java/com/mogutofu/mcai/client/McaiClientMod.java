@@ -30,6 +30,7 @@ public final class McaiClientMod {
         }
         // 延迟到确认是客户端后再加载客户端类（避免专用服务器加载 Minecraft/Screenshot 等）
         DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> ClientNet::register);
-        LOGGER.info("[mcai-client] Minecraft AI Chat 客户端已加载（截图/文件附件）");
+        DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> BridgeClient::register);
+        LOGGER.info("[mcai-client] Minecraft AI Chat 客户端已加载（截图/文件附件 + Bukkit 桥接）");
     }
 }

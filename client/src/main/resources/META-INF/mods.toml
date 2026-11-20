@@ -30,7 +30,7 @@ side="BOTH"
 # 服务器没装 mcai 时不会收到附件请求，功能自然不可用。
 [[dependencies.${mod_id}]]
 modId="mcai"
-mandatory=true
+mandatory=false
 versionRange="[1.1.0,)"
 ordering="NONE"
 side="SERVER"

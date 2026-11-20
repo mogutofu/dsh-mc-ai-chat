@@ -3,11 +3,11 @@ version: '${version}'
 main: com.mogutofu.mcai.bukkit.McaiPlugin
 api-version: '1.20'
 authors: [mogutofu]
-description: Minecraft AI Chat for Bukkit/Spigot/Paper - /ai chat, /weather and /vote weather voting.
+description: Minecraft AI Chat for Bukkit/Spigot/Paper - /ai chat (+ /ai screenshot, /ai file for mcai-client 1.4.0), /weather and /vote weather voting.
 website: https://github.com/mogutofu/dsh-mc-ai-chat
 commands:
   ai:
-    description: Chat with the AI (Xiaotong); /ai message <text> is equivalent.
+    description: Chat with the AI (Xiaotong); /ai message <text> is equivalent, /ai screenshot|file need mcai-client 1.4.0.
     usage: /ai <text>
     permission: mcai.ai
   vote:

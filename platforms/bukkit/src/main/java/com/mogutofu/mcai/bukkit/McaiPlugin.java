@@ -1,6 +1,8 @@
 package com.mogutofu.mcai.bukkit;
 
+import com.mogutofu.mcai.core.AiClient;
 import com.mogutofu.mcai.core.AiSettings;
+import com.mogutofu.mcai.core.Attachment;
 import com.mogutofu.mcai.core.Cooldown;
 import com.mogutofu.mcai.core.WeatherSettings;
 import com.mogutofu.mcai.core.WeatherVoteService;
@@ -14,17 +16,24 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.util.UUID;
 
 /**
  * Bukkit / Spigot / Paper 版 mc-ai。
  *
- * <p>只做文字 {@code /ai}（没有客户端附件），但完整实现 {@code /weather} + {@code /vote}
- * 天气投票，配置读服务器目录 {@code config/mcai-weather.json}（与 Forge 模组同字段/默认值）。</p>
+ * <p>文字 {@code /ai}、{@code /weather} + {@code /vote} 天气投票，配置读服务器目录
+ * {@code config/mcai-weather.json}（与 Forge 模组同字段/默认值）。</p>
+ *
+ * <p>1.4.0 起增加附件桥接：装了 mcai-client 1.4.0（Forge 1.20.1 / NeoForge 1.21.1 / 26.x /
+ * Fabric 26.x）的玩家可以在只装本插件的服务器上用 {@code /ai screenshot}、{@code /ai file}。
+ * 通道 {@code mcai:bridge} 只传元数据，截图/文件字节走插件自带的上传端口（默认 25566），
+ * 参数在 {@code plugins/mc-ai/config.yml}。</p>
  */
 public final class McaiPlugin extends JavaPlugin implements WeatherVoteService.Host {
 
     private final Cooldown cooldown = new Cooldown();
     private WeatherVoteService weatherService;
+    private BridgeChannel bridge;
 
     @Override
     public void onEnable() {
@@ -48,6 +57,14 @@ public final class McaiPlugin extends JavaPlugin implements WeatherVoteService.H
             vote.setTabCompleter(executor);
         }
 
+        // 附件桥接：端口绑不上只禁用桥接，文字 /ai 和天气投票照旧
+        saveDefaultConfig();
+        bridge = new BridgeChannel(this, BridgeConfig.load(getConfig()));
+        boolean bridgeReady = bridge.start();
+        getLogger().info(bridgeReady
+                ? "mc-ai 已加载（/ai 文字 + 附件桥接；/weather + /vote 天气投票）"
+                : "mc-ai 已加载（/ai 文字；附件桥接未启用；/weather + /vote 天气投票）");
+
         // 天气投票超时检查：每 tick 调一次，内部每 20 tick 判定一次。
         getServer().getScheduler().runTaskTimer(this, () -> {
             if (weatherService != null) {
@@ -55,11 +72,20 @@ public final class McaiPlugin extends JavaPlugin implements WeatherVoteService.H
             }
         }, 20L, 1L);
 
-        getLogger().info("mc-ai 已加载（/ai 文字聊天；/weather + /vote 天气投票）");
+        // 附件会话 15 秒超时 + 过期 token 清理
+        getServer().getScheduler().runTaskTimer(this, () -> {
+            if (bridge != null) {
+                bridge.tick();
+            }
+        }, 20L, 20L);
     }
 
     @Override
     public void onDisable() {
+        if (bridge != null) {
+            bridge.stop();
+            bridge = null;
+        }
         if (weatherService != null) {
             weatherService.reset();
         }
@@ -76,6 +102,34 @@ public final class McaiPlugin extends JavaPlugin implements WeatherVoteService.H
 
     Cooldown cooldown() {
         return cooldown;
+    }
+
+    BridgeChannel bridge() {
+        return bridge;
+    }
+
+    /**
+     * 统一入口：问一次 AI（带可选附件），结果切回主线程贴到聊天栏。
+     *
+     * <p>文字 {@code /ai}、桥接 upload 完成、桥接失败降级都走这里，保证回复格式一致。</p>
+     */
+    void askAi(UUID playerId, String playerName, String text, Attachment attachment) {
+        AiSettings settings = aiSettings();
+        if (!settings.enabled) {
+            Player current = getServer().getPlayer(playerId);
+            if (current != null) {
+                current.sendMessage("[小铜] AI 未开启");
+            }
+            return;
+        }
+        AiClient.ask(settings, playerId, playerName, text, attachment, getLogger()::info,
+                (ok, reply) -> getServer().getScheduler().runTask(this, () -> {
+                    Player current = getServer().getPlayer(playerId);
+                    if (current == null) {
+                        return;
+                    }
+                    current.sendMessage(ok ? "[小铜] " + reply : "[小铜] 出错了：" + reply);
+                }));
     }
 
     // ── WeatherVoteService.Host ───────────────────────────────────────

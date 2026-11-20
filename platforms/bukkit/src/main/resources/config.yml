@@ -1,0 +1,46 @@
+# mc-ai（Bukkit / Spigot / Paper）配置文件
+#
+# 这里只放「附件桥接」参数：装了 mcai-client 1.4.0 的玩家可以用 /ai screenshot、/ai file
+# 把截图/本机文件发给你。文字 /ai 与 /weather、/vote 的配置在服务器根目录：
+#   config/mcai-common.json  —— /ai 的 HTTP 地址、超时、限流
+#   config/mcai-weather.json —— 天气投票
+#
+# 桥接流程：客户端登录时在 mcai:bridge 通道发 HELLO → 插件回 INFO（端口/上限）
+#          → 玩家 /ai screenshot|file 时插件发 INFO（一次性 token）+ REQUEST
+#          → 客户端 HTTP POST 字节到本端口 → 插件转给本机 DSH。
+# 大文件不塞 Minecraft 的 32KB 自定义包，只走 TCP。
+
+attachment:
+  # 关掉后 /ai screenshot、/ai file 降级为只发文字（文字 /ai 不受影响）
+  enabled: true
+
+  # 目前只支持 http
+  transport: http
+
+  # HTTP 上传端口；一台机器上跑多个服时每个服要给不同端口
+  port: 25566
+
+  # 监听地址：0.0.0.0 = 所有网卡；只想本机用就填 127.0.0.1（但玩家就传不上来了）
+  bind: 0.0.0.0
+
+  # 下发给客户端的地址：留空 = 用客户端自己连接服务器的地址。
+  # 服务器在 NAT / 反向代理后面时，填公网域名或 IP，例如 "mc.example.com"。
+  advertise-host: ""
+
+  # 下发给客户端的端口：0 = 用上面的 port。NAT 映射端口不同时填公网端口。
+  advertise-port: 0
+
+  # 一次性上传 token 的有效期（秒）
+  token-ttl-seconds: 120
+
+  # 单次上传读取超时（秒）；超时/断线该次附件作废，降级为只发文字
+  upload-timeout-seconds: 30
+
+  # 截图上限（MB）
+  max-image-mb: 8
+
+  # 普通文件上限（MB）
+  max-file-mb: 16
+
+  # 同时进行的上传数上限
+  max-concurrent: 2

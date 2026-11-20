@@ -86,8 +86,8 @@ jobs:
           name: mcai-fabric-${{ matrix.mc }}
           if-no-files-found: error
           path: |
-            platforms/fabric/build/libs/mc-ai-fabric-${{ matrix.suffix }}-v1_3_0.jar
-            platforms/fabric/build/libs/mc-ai-client-fabric-${{ matrix.suffix }}-v1_3_0.jar
+            platforms/fabric/build/libs/mc-ai-fabric-${{ matrix.suffix }}-v1_4_0.jar
+            platforms/fabric/build/libs/mc-ai-client-fabric-${{ matrix.suffix }}-v1_4_0.jar
 
       - name: Upload build logs
         if: failure()

@@ -18,16 +18,18 @@ public final class ClientEvents {
 
     @SubscribeEvent
     public static void onLoggingIn(ClientPlayerNetworkEvent.LoggingIn event) {
-        if (!ClientNet.isReady()) {
-            McaiClientMod.LOGGER.warn("[mcai-client] 网络通道未注册，跳过 ClientHello");
-            return;
-        }
         try {
-            ClientNet.sendToServer(new ClientHelloPayload(NetProtocol.PROTOCOL_VERSION));
-            McaiClientMod.LOGGER.info("[mcai-client] 已向服务器发送 ClientHello（协议 {}）",
-                    NetProtocol.PROTOCOL_VERSION);
+            if (!ClientNet.isReady()) {
+                McaiClientMod.LOGGER.warn("[mcai-client] 网络通道未注册，跳过 ClientHello");
+            } else {
+                ClientNet.sendToServer(new ClientHelloPayload(NetProtocol.PROTOCOL_VERSION));
+                McaiClientMod.LOGGER.info("[mcai-client] 已向服务器发送 ClientHello（协议 {}）",
+                        NetProtocol.PROTOCOL_VERSION);
+            }
         } catch (RuntimeException error) {
             McaiClientMod.LOGGER.warn("[mcai-client] 发送 ClientHello 失败", error);
         }
+        // 1.4.0：Bukkit 插件服也要能收到附件请求
+        BridgeClient.onLogin();
     }
 }

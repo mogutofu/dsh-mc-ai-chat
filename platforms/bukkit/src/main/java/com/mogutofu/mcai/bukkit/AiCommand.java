@@ -1,6 +1,5 @@
 package com.mogutofu.mcai.bukkit;
 
-import com.mogutofu.mcai.core.AiClient;
 import com.mogutofu.mcai.core.AiSettings;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -12,10 +11,18 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
-/** {@code /ai}：Bukkit 版只发文字；screenshot/file 会降级为只发消息并提示。 */
+/**
+ * {@code /ai}：文字聊天 + 附件桥接。
+ *
+ * <p>{@code /ai screenshot}、{@code /ai file} 先看玩家有没有 mcai-client 1.4.0 桥接：
+ * 有就走 {@code mcai:bridge} + HTTP 上传；没有（没装客户端 / 旧客户端 / 端口没起来）
+ * 按 1.3.0 的行为降级为只发文字并提示。</p>
+ */
 public final class AiCommand implements CommandExecutor, TabCompleter {
 
-    private static final String USAGE = "用法：/ai <内容>（或 /ai message <内容>）";
+    private static final String USAGE = "用法：/ai <内容>（或 /ai message <内容>；装了 mcai-client 1.4.0 还能用 "
+            + "/ai screenshot [内容] 和 /ai file <本地路径> <消息>）";
+    private static final String NO_CLIENT = "客户端未安装 mcai-client 1.4.0（或附件桥接未启用），已改为只发送消息。";
 
     private final McaiPlugin plugin;
 
@@ -41,36 +48,73 @@ public final class AiCommand implements CommandExecutor, TabCompleter {
                 player.sendMessage(USAGE);
                 return true;
             }
-            ask(player, text);
+            askText(player, text);
             return true;
         }
         if ("screenshot".equals(sub)) {
             String text = join(args, 1);
-            if (text.isEmpty()) {
-                player.sendMessage(USAGE);
-                player.sendMessage("Bukkit 版没有客户端附件功能，请用 /ai <内容>。");
+            boolean bridged = ready(player, text);
+            if (!bridged) {
+                if (text.isEmpty()) {
+                    player.sendMessage(USAGE);
+                    return true;
+                }
+                player.sendMessage("[小铜] " + NO_CLIENT);
+                askText(player, text);
                 return true;
             }
-            player.sendMessage("[小铜] Bukkit 版不支持截图，已改为只发送消息。");
-            ask(player, text);
+            player.sendMessage("[小铜] 正在截图…");
+            if (!plugin.bridge().requestAttachment(player, true, "", text)) {
+                // 桥接在 isBridged 之后失效（端口停了/发送异常）：降级
+                plugin.getLogger().warning("向 " + player.getName() + " 发起截图请求失败，降级为只发文字");
+                player.sendMessage("[小铜] 附件请求发送失败，已改为只发送消息。");
+                plugin.askAi(player.getUniqueId(), player.getName(), text, null);
+            }
             return true;
         }
         if ("file".equals(sub)) {
             String raw = join(args, 1);
             String[] parsed = splitPathAndMessage(raw);
-            if (parsed[0].isEmpty() || parsed[1].isEmpty()) {
-                player.sendMessage("用法：/ai file <本地路径> <消息>（Bukkit 版不支持附件，只会发送消息）");
+            if (parsed[0].isEmpty()) {
+                player.sendMessage("用法：/ai file <本地路径> <消息>（有空格时用引号包起来）");
                 return true;
             }
-            player.sendMessage("[小铜] Bukkit 版不支持读取本地文件，已改为只发送消息。");
-            ask(player, parsed[1]);
+            String path = parsed[0];
+            String text = parsed[1];
+            if (!ready(player, text)) {
+                player.sendMessage("[小铜] " + NO_CLIENT);
+                if (!text.isEmpty()) {
+                    askText(player, text);
+                }
+                return true;
+            }
+            player.sendMessage("[小铜] 正在读取 " + path + " …");
+            if (!plugin.bridge().requestAttachment(player, false, path, text)) {
+                plugin.getLogger().warning("向 " + player.getName() + " 发起文件请求失败，降级为只发文字");
+                player.sendMessage("[小铜] 附件请求发送失败，已改为只发送消息。");
+                plugin.askAi(player.getUniqueId(), player.getName(), text, null);
+            }
             return true;
         }
-        ask(player, join(args, 0));
+        askText(player, join(args, 0));
         return true;
     }
 
-    private void ask(Player player, String text) {
+    /** 前置检查：AI 开启 + 限流 + 有没有桥接。返回 true 表示可以走附件。 */
+    private boolean ready(Player player, String text) {
+        AiSettings settings = plugin.aiSettings();
+        if (!settings.enabled) {
+            player.sendMessage("[小铜] AI 未开启");
+            return false;
+        }
+        if (!plugin.cooldown().tryAcquire(player.getUniqueId(), settings.rateLimitSeconds)) {
+            player.sendMessage("[小铜] 慢一点，刚问过啦");
+            return false;
+        }
+        return plugin.bridge() != null && plugin.bridge().isBridged(player);
+    }
+
+    private void askText(Player player, String text) {
         AiSettings settings = plugin.aiSettings();
         if (!settings.enabled) {
             player.sendMessage("[小铜] AI 未开启");
@@ -81,14 +125,7 @@ public final class AiCommand implements CommandExecutor, TabCompleter {
             return;
         }
         player.sendMessage("[小铜] 正在输入…");
-        AiClient.ask(settings, player.getUniqueId(), player.getName(), text, null, plugin.getLogger()::info,
-                (ok, reply) -> plugin.getServer().getScheduler().runTask(plugin, () -> {
-                    Player current = plugin.getServer().getPlayer(player.getUniqueId());
-                    if (current == null) {
-                        return;
-                    }
-                    current.sendMessage(ok ? "[小铜] " + reply : "[小铜] 出错了：" + reply);
-                }));
+        plugin.askAi(player.getUniqueId(), player.getName(), text, null);
     }
 
     private static String join(String[] args, int from) {

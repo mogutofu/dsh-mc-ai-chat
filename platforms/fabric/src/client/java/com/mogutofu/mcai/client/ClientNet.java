@@ -4,12 +4,16 @@ import com.mogutofu.mcai.client.net.AttachmentAbortPayload;
 import com.mogutofu.mcai.client.net.AttachmentChunkPayload;
 import com.mogutofu.mcai.client.net.AttachmentRequestPayload;
 import com.mogutofu.mcai.client.net.AttachmentTooLargePayload;
+import com.mogutofu.mcai.client.net.BridgePayload;
+import com.mogutofu.mcai.client.net.BridgeRegisterPayload;
 import com.mogutofu.mcai.client.net.ClientHelloPayload;
 import com.mogutofu.mcai.client.net.Protocol;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
 import net.minecraft.client.Minecraft;
+import net.minecraft.network.protocol.common.ServerboundCustomPayloadPacket;
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 
 /**
  * 客户端侧 mcai:net 的 Fabric 接线。
@@ -38,13 +42,37 @@ public final class ClientNet {
         ClientPlayNetworking.registerGlobalReceiver(AttachmentTooLargePayload.TYPE, (payload, context) ->
                 context.client().execute(() -> ClientAttachmentTransfer.onTooLarge(payload)));
 
+        registerBridge(c2s, s2c);
+
         // 进服务器时告诉服务端「我装了 mcai-client」；服务器没装服务端模组就什么都不发。
-        ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> sendHello());
+        // 1.4.0：再补一次 Bukkit 桥接握手（声明通道 + HELLO）。
+        ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> {
+            sendHello();
+            BridgeClient.onLogin();
+        });
 
         ready = true;
         McaiClientFabric.LOGGER.info(
                 "[mcai-client] 已注册 Fabric payload mcai:hello/chunk/abort（发）与 mcai:request/too_large（收），协议 {}",
                 Protocol.PROTOCOL_VERSION);
+    }
+
+    /** 1.4.0 附件桥接：mcai:bridge 双向 + minecraft:register 兼容包。 */
+    private static void registerBridge(PayloadTypeRegistry c2s, PayloadTypeRegistry s2c) {
+        try {
+            c2s.register(BridgePayload.TYPE, BridgePayload.STREAM_CODEC);
+            s2c.register(BridgePayload.TYPE, BridgePayload.STREAM_CODEC);
+            ClientPlayNetworking.registerGlobalReceiver(BridgePayload.TYPE, (payload, context) ->
+                    context.client().execute(() -> BridgeClient.handleFrame(payload.data())));
+            BridgeClient.markReady();
+        } catch (Throwable error) {
+            McaiClientFabric.LOGGER.warn("[mcai-client] 注册 mcai:bridge 载荷失败：{}", error.toString());
+        }
+        try {
+            c2s.register(BridgeRegisterPayload.TYPE, BridgeRegisterPayload.STREAM_CODEC);
+        } catch (Throwable error) {
+            McaiClientFabric.LOGGER.info("[mcai-client] minecraft:register 兼容载荷注册被跳过：{}", error.toString());
+        }
     }
 
     /**
@@ -99,6 +127,22 @@ public final class ClientNet {
 
     public static void sendToServer(AttachmentAbortPayload payload) {
         ClientPlayNetworking.send(payload);
+    }
+
+    /**
+     * 绕过 Fabric 的 {@code canSend}（服务端没声明通道就拒绝发送），直接发原版自定义载荷。
+     *
+     * <p>Bukkit 服务器不会有 mcai 通道声明，1.4.0 的附件桥接握手必须走这条原始路径。</p>
+     */
+    public static void sendRaw(CustomPacketPayload payload) {
+        if (payload == null) {
+            throw new IllegalArgumentException("payload 不能为空");
+        }
+        Minecraft minecraft = Minecraft.getInstance();
+        if (minecraft.getConnection() == null) {
+            throw new IllegalStateException("不在服务器里");
+        }
+        minecraft.getConnection().getConnection().send(new ServerboundCustomPayloadPacket(payload));
     }
 
     /** 客户端能不能往当前服务器发分块（服务器得装了 mcai 服务端模组）。 */

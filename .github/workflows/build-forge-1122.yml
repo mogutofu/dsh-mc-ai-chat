@@ -44,8 +44,8 @@ jobs:
       - name: 列出产物与元数据
         run: |
           ls -l platforms/forge-1.12.2/server/build/libs platforms/forge-1.12.2/client/build/libs
-          unzip -p platforms/forge-1.12.2/server/build/libs/mc-ai-forge-1_12_2-v1_3_0.jar mcmod.info | head -20
-          unzip -p platforms/forge-1.12.2/client/build/libs/mc-ai-client-forge-1_12_2-v1_3_0.jar mcmod.info | head -20
+          unzip -p platforms/forge-1.12.2/server/build/libs/mc-ai-forge-1_12_2-v1_4_0.jar mcmod.info | head -20
+          unzip -p platforms/forge-1.12.2/client/build/libs/mc-ai-client-forge-1_12_2-v1_4_0.jar mcmod.info | head -20
 
       # 运行级烟测：临时装一个 Forge 1.12.2 专用服务器，把两个 jar 丢进 mods，
       # 真起一次服确认 mod 加载 + /ai /weather /vote 注册。判定不过就红，日志整份上传。
@@ -60,8 +60,8 @@ jobs:
           echo "eula=true" > eula.txt
           printf 'online-mode=false\nserver-port=25599\nmax-tick-time=-1\n' > server.properties
           mkdir -p mods
-          cp ../platforms/forge-1.12.2/server/build/libs/mc-ai-forge-1_12_2-v1_3_0.jar mods/
-          cp ../platforms/forge-1.12.2/client/build/libs/mc-ai-client-forge-1_12_2-v1_3_0.jar mods/
+          cp ../platforms/forge-1.12.2/server/build/libs/mc-ai-forge-1_12_2-v1_4_0.jar mods/
+          cp ../platforms/forge-1.12.2/client/build/libs/mc-ai-client-forge-1_12_2-v1_4_0.jar mods/
           nohup java -Xmx2G -jar "$SERVER_JAR" nogui > server.log 2>&1 &
           for i in $(seq 1 24); do
             grep -q 'Done (' server.log && break

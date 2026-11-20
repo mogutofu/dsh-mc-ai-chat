@@ -2,7 +2,7 @@ plugins {
     id 'net.fabricmc.fabric-loom' version "${loom_version}"
 }
 
-version = '1.3.0'
+version = '1.4.0'
 group = 'com.mogutofu.mcai'
 
 def mcVersion = (findProperty('mc') ?: project.minecraft_version ?: '26.3').toString()

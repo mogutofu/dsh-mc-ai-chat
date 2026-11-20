@@ -19,24 +19,26 @@ public final class ClientEvents {
     }
 
     public static void onLoggingIn(ClientPlayerNetworkEvent.LoggingIn event) {
-        if (!ClientNet.isReady()) {
-            McaiClientMod.LOGGER.warn("[mcai-client] 网络载荷未注册，跳过 ClientHello");
-            return;
-        }
         try {
-            Connection connection = event.getConnection();
-            if (connection == null) {
-                return;
+            if (!ClientNet.isReady()) {
+                McaiClientMod.LOGGER.warn("[mcai-client] 网络载荷未注册，跳过 ClientHello");
+            } else {
+                Connection connection = event.getConnection();
+                if (connection != null) {
+                    if (!NetworkRegistry.hasChannel(connection, ConnectionProtocol.PLAY, ClientHello.TYPE.id())) {
+                        McaiClientMod.LOGGER.info("[mcai-client] 服务端未安装 mcai，跳过 ClientHello");
+                    } else {
+                        ClientNet.sendToServer(new ClientHello(NetProtocol.PROTOCOL_VERSION));
+                        McaiClientMod.LOGGER.info("[mcai-client] 已向服务器发送 ClientHello（协议 {}）",
+                                NetProtocol.PROTOCOL_VERSION);
+                    }
+                }
             }
-            if (!NetworkRegistry.hasChannel(connection, ConnectionProtocol.PLAY, ClientHello.TYPE.id())) {
-                McaiClientMod.LOGGER.info("[mcai-client] 服务端未安装 mcai，跳过 ClientHello");
-                return;
-            }
-            ClientNet.sendToServer(new ClientHello(NetProtocol.PROTOCOL_VERSION));
-            McaiClientMod.LOGGER.info("[mcai-client] 已向服务器发送 ClientHello（协议 {}）",
-                    NetProtocol.PROTOCOL_VERSION);
         } catch (RuntimeException error) {
             McaiClientMod.LOGGER.warn("[mcai-client] 发送 ClientHello 失败：{}", error.toString());
         }
+        // 1.4.0：不论服务端是不是 mcai 模组服，都发一次 Bukkit 桥接 HELLO；
+        // 没有插件时不会回 INFO，客户端保持「无桥接」，原有功能不受影响。
+        BridgeClient.onLogin(event.getConnection());
     }
 }
