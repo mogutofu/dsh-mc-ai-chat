@@ -7,8 +7,10 @@ import com.mogutofu.mcai.client.net.AttachmentTooLargePayload;
 import com.mogutofu.mcai.client.net.NetProtocol;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.Screenshot;
 import net.minecraft.network.chat.Component;
 
+import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
@@ -21,8 +23,9 @@ import java.util.UUID;
  * 收到 AttachmentRequest 后真正干活的地方（客户端主线程）。
  *
  * <ol>
- *   <li>截图：{@code Screenshot.takeScreenshot(minecraft.getMainRenderTarget())} 拿 NativeImage，
- *       {@code asByteArray()} 得到 PNG 字节，close 掉 NativeImage；</li>
+ *   <li>截图：26.x 取 {@code gameRenderer.mainRenderTarget()}，
+ *       {@code Screenshot.takeScreenshot(target, Consumer<NativeImage>)} 回调里把
+ *       NativeImage 写成临时 PNG 再读字节；</li>
  *   <li>文件：先 {@code Files.size} 校验上限再 {@code Files.readAllBytes}；</li>
  *   <li>按 24KB 分块发 AttachmentChunk，失败发 AttachmentAbort。</li>
  * </ol>
@@ -71,13 +74,42 @@ public final class AttachmentTransfer {
 
     // ── 截图 ──────────────────────────────────────────────────────────
 
-    private static void captureScreenshot(Minecraft minecraft, AttachmentRequestPayload request) throws Exception {
-        byte[] data = capturePng(minecraft);
-        if (data == null) {
-            abort(request.transferId, "截图失败：当前客户端版本暂时读不到游戏画面");
-            return;
-        }
-        if (data.length <= 0) {
+    /**
+     * 截当前画面。26.x 的渲染层换成了 GPU 抽象：取画面用
+     * {@code gameRenderer.mainRenderTarget()}，截图用
+     * {@code Screenshot.takeScreenshot(target, Consumer<NativeImage>)}，
+     * 回调里把 NativeImage 写成临时 PNG 再读字节（{@code asByteArray()} 26.x 已没有）。
+     *
+     * <p>必须在客户端主线程发起；回调可能在渲染线程，所以这里不在回调里碰游戏状态，
+     * 只做文件 IO + 发包。</p>
+     */
+    private static void captureScreenshot(Minecraft minecraft, AttachmentRequestPayload request) {
+        var target = minecraft.gameRenderer.mainRenderTarget();
+        Screenshot.takeScreenshot(target, image -> {
+            File temp = null;
+            try {
+                temp = File.createTempFile("mcai-shot", ".png");
+                image.writeToFile(temp);
+                byte[] data = Files.readAllBytes(temp.toPath());
+                onScreenshotBytes(request, data);
+            } catch (Throwable error) {
+                McaiClientMod.LOGGER.warn("[mcai-client] 截图失败", error);
+                abort(request.transferId, describe(error));
+            } finally {
+                try {
+                    image.close();
+                } catch (RuntimeException ignored) {
+                    // 关不掉就算了
+                }
+                if (temp != null && !temp.delete()) {
+                    temp.deleteOnExit();
+                }
+            }
+        });
+    }
+
+    private static void onScreenshotBytes(AttachmentRequestPayload request, byte[] data) {
+        if (data == null || data.length <= 0) {
             abort(request.transferId, "截图失败：PNG 数据为空");
             return;
         }
@@ -88,17 +120,6 @@ public final class AttachmentTransfer {
         }
         McaiClientMod.LOGGER.info("[mcai-client] 已截图 {} 字节", data.length);
         sendChunks(request.transferId, data, "screenshot.png", "image/png", true);
-    }
-
-    /**
-     * 截当前画面并编码成 PNG 字节；失败返回 null。
-     *
-     * <p>TODO(26.x)：26.x 把渲染换成了 GPU 抽象层（GpuDevice / CommandEncoder），
-     * 旧的 {@code Screenshot.takeScreenshot(RenderTarget)} 与
-     * {@code NativeImage.asByteArray()} 都没了；确认新 API 后补实现。</p>
-     */
-    private static byte[] capturePng(Minecraft minecraft) {
-        return null;
     }
 
     // ── 本地文件 ──────────────────────────────────────────────────────

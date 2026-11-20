@@ -19,13 +19,3 @@ tasks.register('build') {
         out.listFiles()?.sort()?.each { println "mcai: ${it.name} (${it.length()} bytes)" }
     }
 }
-
-// CI 里的 API 自查用：打印两个子工程的编译 classpath，方便直接 javap 查 MC 方法签名
-tasks.register('printCompileCp') {
-    group = 'help'
-    description = '打印 server / client 的 compileClasspath（供 ci/dump-api.sh 用）'
-    doLast {
-        println 'CP_SERVER=' + project(':server').sourceSets.main.compileClasspath.asPath
-        println 'CP_CLIENT=' + project(':client').sourceSets.main.compileClasspath.asPath
-    }
-}

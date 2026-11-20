@@ -3,7 +3,7 @@ name: build-neoforge-26
 on:
   push:
     paths:
-      - 'platforms/neoforge/**'
+      - 'platforms/neoforge-26.x/**'
       - 'common/**'
       - '.github/workflows/build-neoforge-26.yml'
   workflow_dispatch:
@@ -32,20 +32,15 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
 
       - name: Make wrapper executable
-        run: chmod +x platforms/neoforge/gradlew
+        run: chmod +x platforms/neoforge-26.x/gradlew
 
       - name: Build
-        working-directory: platforms/neoforge
+        working-directory: platforms/neoforge-26.x
         run: ./gradlew build --no-daemon -Pmc=${{ matrix.mc }} -Pneo=${{ matrix.neo }}
-
-      - name: API dump (diagnostics)
-        if: always()
-        working-directory: platforms/neoforge
-        run: bash ci/dump-api.sh
 
       - name: Show built jars
         if: always()
-        working-directory: platforms/neoforge
+        working-directory: platforms/neoforge-26.x
         run: |
           echo '--- build/libs'
           ls -la build/libs 2>/dev/null || echo '(none)'
@@ -56,31 +51,10 @@ jobs:
             unzip -l "$f" | grep -E '\.class$' | head -40
           done
 
-      # 临时诊断：把 MC 相关的大 jar 带上，本地 javap 看 26.x 客户端 API（截图）
-      - name: Collect MC jars for API inspection
-        if: always()
-        run: |
-          mkdir -p /tmp/mcjars
-          find "$HOME/.gradle/caches" -name '*.jar' -size +2M 2>/dev/null \
-            | grep -viE 'sources|natives|javadoc|/wrapper/' | sort -u | head -10 > /tmp/mcjar-list.txt
-          echo '--- candidates (5 largest) ---'
-          head -5 /tmp/mcjar-list.txt
-          while read -r j; do cp -n "$j" /tmp/mcjars/ 2>/dev/null || true; done < <(head -5 /tmp/mcjar-list.txt)
-          ls -la /tmp/mcjars || true
-
-      - name: Upload MC jars (diagnostic)
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: mcjars-${{ matrix.mc }}
-          path: /tmp/mcjars/*.jar
-          if-no-files-found: warn
-          retention-days: 2
-
       - name: Upload jars
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: mcai-neoforge-${{ matrix.mc }}
-          path: platforms/neoforge/build/libs/*.jar
+          path: platforms/neoforge-26.x/build/libs/*.jar
           if-no-files-found: warn
