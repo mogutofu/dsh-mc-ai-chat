@@ -18,6 +18,13 @@ version = modVersion
 // MC 26.x 用 Java 25
 java.toolchain.languageVersion = JavaLanguageVersion.of(25)
 
+// 版本差异：26.1 的「主渲染目标」在 Minecraft#getMainRenderTarget()，
+// 26.2 起搬到 GameRenderer#mainRenderTarget()。截图实现按 -Pmc= 二选一编进来。
+def screenshotImpl = mcVersion.startsWith('26.1')
+        ? 'src/versioned/26_1/java'
+        : 'src/versioned/26_2plus/java'
+sourceSets.main.java.srcDir screenshotImpl
+
 neoForge {
     version = neoVersion
     mods {

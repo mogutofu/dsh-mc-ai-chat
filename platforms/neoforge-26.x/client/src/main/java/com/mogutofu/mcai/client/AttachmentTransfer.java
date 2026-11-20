@@ -7,10 +7,8 @@ import com.mogutofu.mcai.client.net.AttachmentTooLargePayload;
 import com.mogutofu.mcai.client.net.NetProtocol;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.Screenshot;
 import net.minecraft.network.chat.Component;
 
-import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
@@ -75,37 +73,17 @@ public final class AttachmentTransfer {
     // ── 截图 ──────────────────────────────────────────────────────────
 
     /**
-     * 截当前画面。26.x 的渲染层换成了 GPU 抽象：取画面用
-     * {@code gameRenderer.mainRenderTarget()}，截图用
-     * {@code Screenshot.takeScreenshot(target, Consumer<NativeImage>)}，
-     * 回调里把 NativeImage 写成临时 PNG 再读字节（{@code asByteArray()} 26.x 已没有）。
-     *
-     * <p>必须在客户端主线程发起；回调可能在渲染线程，所以这里不在回调里碰游戏状态，
-     * 只做文件 IO + 发包。</p>
+     * 截当前画面。26.x 的渲染层换成了 GPU 抽象，取画面目标的访问器 26.1 与 26.2+ 不同，
+     * 统一由 {@link ScreenshotCapture}（按版本编进来的一份实现）处理；回调里只剩
+     * 文件 IO + 发包，不碰游戏状态。
      */
     private static void captureScreenshot(Minecraft minecraft, AttachmentRequestPayload request) {
-        var target = minecraft.gameRenderer.mainRenderTarget();
-        Screenshot.takeScreenshot(target, image -> {
-            File temp = null;
-            try {
-                temp = File.createTempFile("mcai-shot", ".png");
-                image.writeToFile(temp);
-                byte[] data = Files.readAllBytes(temp.toPath());
-                onScreenshotBytes(request, data);
-            } catch (Throwable error) {
-                McaiClientMod.LOGGER.warn("[mcai-client] 截图失败", error);
-                abort(request.transferId, describe(error));
-            } finally {
-                try {
-                    image.close();
-                } catch (RuntimeException ignored) {
-                    // 关不掉就算了
-                }
-                if (temp != null && !temp.delete()) {
-                    temp.deleteOnExit();
-                }
-            }
-        });
+        ScreenshotCapture.capture(minecraft,
+                data -> onScreenshotBytes(request, data),
+                error -> {
+                    McaiClientMod.LOGGER.warn("[mcai-client] 截图失败", error);
+                    abort(request.transferId, describe(error));
+                });
     }
 
     private static void onScreenshotBytes(AttachmentRequestPayload request, byte[] data) {
