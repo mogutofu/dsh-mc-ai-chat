@@ -45,6 +45,9 @@ done
 echo "extracted java files: $(find /tmp/neo-src -name '*.java' | wc -l)"
 
 # 编译 classpath：MDG 生成的 MC 类在这里，javap 用
+echo
+echo "===== printCompileCp raw ====="
+./gradlew --no-daemon printCompileCp 2>&1 | tail -20
 CP=$(./gradlew -q --no-daemon printCompileCp 2>/dev/null | sed -n 's/^CP_SERVER=//p;s/^CP_CLIENT=//p' | tr '\n' ':')
 echo
 echo "===== compile classpath entries: $(echo "$CP" | tr ':' '\n' | grep -c .) ====="

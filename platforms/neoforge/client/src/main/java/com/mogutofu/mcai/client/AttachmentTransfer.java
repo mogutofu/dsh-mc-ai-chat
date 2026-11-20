@@ -5,10 +5,8 @@ import com.mogutofu.mcai.client.net.AttachmentChunkPayload;
 import com.mogutofu.mcai.client.net.AttachmentRequestPayload;
 import com.mogutofu.mcai.client.net.AttachmentTooLargePayload;
 import com.mogutofu.mcai.client.net.NetProtocol;
-import com.mojang.blaze3d.platform.NativeImage;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.Screenshot;
 import net.minecraft.network.chat.Component;
 
 import java.nio.file.Files;
@@ -75,8 +73,12 @@ public final class AttachmentTransfer {
 
     private static void captureScreenshot(Minecraft minecraft, AttachmentRequestPayload request) throws Exception {
         byte[] data = capturePng(minecraft);
-        if (data == null || data.length <= 0) {
-            abort(request.transferId, "截图失败：没有拿到画面");
+        if (data == null) {
+            abort(request.transferId, "截图失败：当前客户端版本暂时读不到游戏画面");
+            return;
+        }
+        if (data.length <= 0) {
+            abort(request.transferId, "截图失败：PNG 数据为空");
             return;
         }
         if (data.length > request.maxBytes) {
@@ -88,17 +90,15 @@ public final class AttachmentTransfer {
         sendChunks(request.transferId, data, "screenshot.png", "image/png", true);
     }
 
-    /** 截当前画面并编码成 PNG 字节；失败返回 null。 */
-    private static byte[] capturePng(Minecraft minecraft) throws Exception {
-        NativeImage image = Screenshot.takeScreenshot(minecraft.getMainRenderTarget());
-        if (image == null) {
-            return null;
-        }
-        try {
-            return image.asByteArray();
-        } finally {
-            image.close();
-        }
+    /**
+     * 截当前画面并编码成 PNG 字节；失败返回 null。
+     *
+     * <p>TODO(26.x)：26.x 把渲染换成了 GPU 抽象层（GpuDevice / CommandEncoder），
+     * 旧的 {@code Screenshot.takeScreenshot(RenderTarget)} 与
+     * {@code NativeImage.asByteArray()} 都没了；确认新 API 后补实现。</p>
+     */
+    private static byte[] capturePng(Minecraft minecraft) {
+        return null;
     }
 
     // ── 本地文件 ──────────────────────────────────────────────────────

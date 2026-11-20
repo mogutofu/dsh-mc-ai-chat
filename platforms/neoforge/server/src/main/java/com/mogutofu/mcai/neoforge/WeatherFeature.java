@@ -6,12 +6,12 @@ import com.mogutofu.mcai.core.WeatherVoteService;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.context.CommandContext;
+import com.mojang.brigadier.tree.CommandNode;
 import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 
 import java.io.File;
@@ -33,6 +33,11 @@ import java.util.UUID;
  * 发起人自动算 1 票同意，同意票达到 approveNeed（默认 2）通过，
  * 反对票达到 rejectNeed（默认 1）作废，超时 timeoutSeconds（默认 60 秒）作废。
  * 每人发起有 cooldownSeconds（默认 60 秒）冷却。控制台 / OP 直接生效。</p>
+ *
+ * <p>真正改天气不走 {@code ServerLevel} 的 weather 方法（26.x 改过名），而是把原版
+ * {@code /weather} 指令子树从主 dispatcher 挪到自己的私有 dispatcher 里，需要时用
+ * 控制台权限执行 {@code weather <type> [秒]} —— 行为、参数（秒）都和原版一致，
+ * 三套 26.x 版本都不用跟着 MC 的天气 API 改。</p>
  */
 public final class WeatherFeature implements WeatherVoteService.Host {
 
@@ -40,6 +45,8 @@ public final class WeatherFeature implements WeatherVoteService.Host {
 
     private final WeatherVoteService service = new WeatherVoteService(this);
     private volatile MinecraftServer server;
+    /** 原版 /weather 的指令子树（挪出主 dispatcher 后保留，用来执行真正的天气切换）。 */
+    private volatile CommandDispatcher<CommandSourceStack> vanillaWeather;
 
     private WeatherFeature() {
     }
@@ -91,14 +98,24 @@ public final class WeatherFeature implements WeatherVoteService.Host {
 
     public void registerCommands(CommandDispatcher<CommandSourceStack> dispatcher) {
         // 原版 /weather 要求 OP（permission 2），普通玩家用不了；把原版节点拿掉换成我们自己的。
+        // 原版子树搬到私有 dispatcher 里留着：真正改天气时用控制台权限执行它，
+        // 这样不用碰 ServerLevel 的天气方法（26.x 换了 API）。
+        CommandDispatcher<CommandSourceStack> vanillaOnly = new CommandDispatcher<>();
         try {
+            CommandNode<CommandSourceStack> vanilla = dispatcher.getRoot().getChild("weather");
+            if (vanilla != null) {
+                vanillaOnly.getRoot().addChild(vanilla);
+                McaiMod.LOGGER.info("[mcai] 已接管原版 /weather（原版需要 OP，现在普通玩家也能发起天气投票）");
+            } else {
+                McaiMod.LOGGER.warn("[mcai] 没找到原版 /weather 节点，天气切换会退化为不执行");
+            }
             dispatcher.getRoot().getChildren().removeIf(node ->
                     "weather".equals(node.getName()) || "vote".equals(node.getName()));
-            McaiMod.LOGGER.info("[mcai] 已替换原版 /weather（原版需要 OP，现在普通玩家也能发起天气投票）");
         } catch (Throwable broken) {
             McaiMod.LOGGER.warn("[mcai] 替换原版 /weather 失败（普通玩家可能仍受原版权限限制）：{}",
                     broken.toString());
         }
+        this.vanillaWeather = vanillaOnly;
 
         dispatcher.register(Commands.literal("weather")
                 .executes(context -> {
@@ -196,20 +213,21 @@ public final class WeatherFeature implements WeatherVoteService.Host {
         if (current == null) {
             return;
         }
+        CommandDispatcher<CommandSourceStack> vanilla = vanillaWeather;
+        if (vanilla == null || vanilla.getRoot().getChildren().isEmpty()) {
+            McaiMod.LOGGER.warn("[mcai] 原版 /weather 不可用，天气没有改（type={})", type);
+            return;
+        }
+        StringBuilder command = new StringBuilder("weather ").append(type);
+        if (durationSeconds != null) {
+            // 原版 /weather <type> [秒]，秒数由原版自己 ×20 转 tick
+            command.append(' ').append(durationSeconds);
+        }
         try {
-            ServerLevel level = current.overworld();
-            int ticks = durationSeconds == null
-                    ? WeatherVoteService.defaultDurationTicks()
-                    : durationSeconds * 20;
-            if ("clear".equals(type)) {
-                level.setWeatherParameters(ticks, 0, false, false);
-            } else if ("rain".equals(type)) {
-                level.setWeatherParameters(0, ticks, true, false);
-            } else if ("thunder".equals(type)) {
-                level.setWeatherParameters(0, ticks, true, true);
-            }
+            // createCommandSourceStack() 是服务器控制台身份（权限 4），能过原版的 OP 要求
+            vanilla.execute(command.toString(), current.createCommandSourceStack());
         } catch (Throwable broken) {
-            McaiMod.LOGGER.error("[mcai] 设置天气失败：{}", broken.toString());
+            McaiMod.LOGGER.error("[mcai] 设置天气失败（{}）：{}", command, broken.toString());
         }
     }
 

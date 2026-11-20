@@ -56,6 +56,27 @@ jobs:
             unzip -l "$f" | grep -E '\.class$' | head -40
           done
 
+      # 临时诊断：把 MC 相关的大 jar 带上，本地 javap 看 26.x 客户端 API（截图）
+      - name: Collect MC jars for API inspection
+        if: always()
+        run: |
+          mkdir -p /tmp/mcjars
+          find "$HOME/.gradle/caches" -name '*.jar' -size +2M 2>/dev/null \
+            | grep -viE 'sources|natives|javadoc|/wrapper/' | sort -u | head -10 > /tmp/mcjar-list.txt
+          echo '--- candidates (5 largest) ---'
+          head -5 /tmp/mcjar-list.txt
+          while read -r j; do cp -n "$j" /tmp/mcjars/ 2>/dev/null || true; done < <(head -5 /tmp/mcjar-list.txt)
+          ls -la /tmp/mcjars || true
+
+      - name: Upload MC jars (diagnostic)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mcjars-${{ matrix.mc }}
+          path: /tmp/mcjars/*.jar
+          if-no-files-found: warn
+          retention-days: 2
+
       - name: Upload jars
         if: always()
         uses: actions/upload-artifact@v4
