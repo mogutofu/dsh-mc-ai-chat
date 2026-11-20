@@ -75,7 +75,8 @@ public final class ClientAttachmentTransfer {
     // ── 截图 ──────────────────────────────────────────────────────────
 
     private static void captureScreenshot(Minecraft minecraft, AttachmentRequestPayload request) throws Exception {
-        NativeImage image = Screenshot.takeScreenshot(minecraft.getMainRenderTarget());
+        // 26.x 把 "主渲染目标" 从 Minecraft 挪到了 GameRenderer（getMainRenderTarget -> mainRenderTarget）
+        NativeImage image = Screenshot.takeScreenshot(minecraft.gameRenderer.mainRenderTarget());
         if (image == null) {
             abort(request.transferId(), "截图失败：没有拿到画面");
             return;

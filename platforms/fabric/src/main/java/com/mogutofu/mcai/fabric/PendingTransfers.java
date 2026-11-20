@@ -166,7 +166,7 @@ public final class PendingTransfers {
                 pending.kind == Protocol.KIND_SCREENSHOT ? "截图" : "文件",
                 fileName, mediaType, assembled.length, pending.chunkCount);
         Chat.thinking(player);
-        Chat.ask(server, player, pending.message, new Attachment(image, fileName, mediaType, assembled));
+        Chat.ask(server, player, pending.message, new Attachment(fileName, mediaType, image, assembled));
     }
 
     /** 客户端读取失败/放弃。 */

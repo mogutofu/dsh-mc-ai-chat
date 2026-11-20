@@ -22,12 +22,34 @@ public final class FabNet {
 
     /** 在 {@code onInitialize()} 里注册 payload 类型（C2S 接收 + S2C 发送）。 */
     public static void registerPayloads() {
-        PayloadTypeRegistry.playC2S().register(ClientHelloPayload.TYPE, ClientHelloPayload.STREAM_CODEC);
-        PayloadTypeRegistry.playC2S().register(AttachmentChunkPayload.TYPE, AttachmentChunkPayload.STREAM_CODEC);
-        PayloadTypeRegistry.playC2S().register(AttachmentAbortPayload.TYPE, AttachmentAbortPayload.STREAM_CODEC);
-        PayloadTypeRegistry.playS2C().register(AttachmentRequestPayload.TYPE, AttachmentRequestPayload.STREAM_CODEC);
-        PayloadTypeRegistry.playS2C().register(AttachmentTooLargePayload.TYPE, AttachmentTooLargePayload.STREAM_CODEC);
+        PayloadTypeRegistry c2s = registry("serverboundPlay", "playC2S");
+        PayloadTypeRegistry s2c = registry("clientboundPlay", "playS2C");
+        c2s.register(ClientHelloPayload.TYPE, ClientHelloPayload.STREAM_CODEC);
+        c2s.register(AttachmentChunkPayload.TYPE, AttachmentChunkPayload.STREAM_CODEC);
+        c2s.register(AttachmentAbortPayload.TYPE, AttachmentAbortPayload.STREAM_CODEC);
+        s2c.register(AttachmentRequestPayload.TYPE, AttachmentRequestPayload.STREAM_CODEC);
+        s2c.register(AttachmentTooLargePayload.TYPE, AttachmentTooLargePayload.STREAM_CODEC);
         ready = true;
+    }
+
+    /**
+     * 26.x 的 Fabric API 把 {@code PayloadTypeRegistry.playC2S()/playS2C()} 改名成
+     * {@code serverboundPlay()/clientboundPlay()}（0.160.4 起的 javadoc 用新名）。
+     * 三个 MC 版本共用一个源码集，所以这里两个名字都试，哪个存在用哪个。
+     */
+    static PayloadTypeRegistry registry(String primary, String fallback) {
+        for (String name : new String[]{primary, fallback}) {
+            try {
+                Object value = PayloadTypeRegistry.class.getMethod(name).invoke(null);
+                if (value instanceof PayloadTypeRegistry registry) {
+                    return registry;
+                }
+            } catch (Throwable ignored) {
+                // 换下一个名字
+            }
+        }
+        throw new IllegalStateException(
+                "Fabric API 的 PayloadTypeRegistry 没有 " + primary + "() / " + fallback + "()，版本不兼容");
     }
 
     /** 注册 C→S 三个消息的接收器；处理逻辑统一切回服务端主线程。 */

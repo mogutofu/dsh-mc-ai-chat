@@ -25,11 +25,13 @@ public final class ClientNet {
     }
 
     public static void register() {
-        PayloadTypeRegistry.playC2S().register(ClientHelloPayload.TYPE, ClientHelloPayload.STREAM_CODEC);
-        PayloadTypeRegistry.playC2S().register(AttachmentChunkPayload.TYPE, AttachmentChunkPayload.STREAM_CODEC);
-        PayloadTypeRegistry.playC2S().register(AttachmentAbortPayload.TYPE, AttachmentAbortPayload.STREAM_CODEC);
-        PayloadTypeRegistry.playS2C().register(AttachmentRequestPayload.TYPE, AttachmentRequestPayload.STREAM_CODEC);
-        PayloadTypeRegistry.playS2C().register(AttachmentTooLargePayload.TYPE, AttachmentTooLargePayload.STREAM_CODEC);
+        PayloadTypeRegistry c2s = registry("serverboundPlay", "playC2S");
+        PayloadTypeRegistry s2c = registry("clientboundPlay", "playS2C");
+        c2s.register(ClientHelloPayload.TYPE, ClientHelloPayload.STREAM_CODEC);
+        c2s.register(AttachmentChunkPayload.TYPE, AttachmentChunkPayload.STREAM_CODEC);
+        c2s.register(AttachmentAbortPayload.TYPE, AttachmentAbortPayload.STREAM_CODEC);
+        s2c.register(AttachmentRequestPayload.TYPE, AttachmentRequestPayload.STREAM_CODEC);
+        s2c.register(AttachmentTooLargePayload.TYPE, AttachmentTooLargePayload.STREAM_CODEC);
 
         ClientPlayNetworking.registerGlobalReceiver(AttachmentRequestPayload.TYPE, (payload, context) ->
                 context.client().execute(() -> ClientAttachmentTransfer.handle(payload)));
@@ -43,6 +45,26 @@ public final class ClientNet {
         McaiClientFabric.LOGGER.info(
                 "[mcai-client] 已注册 Fabric payload mcai:hello/chunk/abort（发）与 mcai:request/too_large（收），协议 {}",
                 Protocol.PROTOCOL_VERSION);
+    }
+
+    /**
+     * 26.x 的 Fabric API 把 {@code PayloadTypeRegistry.playC2S()/playS2C()} 改名成
+     * {@code serverboundPlay()/clientboundPlay()}；三个 MC 版本共用一个源码集，
+     * 两个名字都试，哪个存在用哪个。
+     */
+    private static PayloadTypeRegistry registry(String primary, String fallback) {
+        for (String name : new String[]{primary, fallback}) {
+            try {
+                Object value = PayloadTypeRegistry.class.getMethod(name).invoke(null);
+                if (value instanceof PayloadTypeRegistry registry) {
+                    return registry;
+                }
+            } catch (Throwable ignored) {
+                // 换下一个名字
+            }
+        }
+        throw new IllegalStateException(
+                "Fabric API 的 PayloadTypeRegistry 没有 " + primary + "() / " + fallback + "()，版本不兼容");
     }
 
     private static void sendHello() {

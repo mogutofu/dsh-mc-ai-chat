@@ -96,19 +96,22 @@ gradle build --no-daemon -Pmc=26.3 -Pfabric_api=0.166.2+26.3
 | --- | --- | --- |
 | 通道 | 单通道 `mcai:net` + 消息索引 | 5 个 payload：`mcai:hello` / `mcai:request` / `mcai:chunk` / `mcai:abort` / `mcai:too_large`，字段、方向、24KB 分块、上限完全一致 |
 | 序列化 | `FriendlyByteBuf`（SimpleChannel 注册 encode/decode） | `StreamCodec<FriendlyByteBuf, T>`（`CustomPacketPayload`），读写同样的字段顺序 |
+| payload 注册 | SimpleChannel | `PayloadTypeRegistry`；26.x 把 `playC2S()/playS2C()` 改名为 `serverboundPlay()/clientboundPlay()`，这里两个名字都探测（三个 MC 版本共用一个源码集） |
 | 服务端判定客户端 | `ClientPresence` + hello | 同左；发请求前额外用 `ServerPlayNetworking.canSend` 兜底 |
 | 客户端判断服务器支持 | SimpleChannel 版本协商 | `ClientPlayNetworking.canSend`，服务器没装就跳过 hello |
+| 天气执行 | `ServerLevel.setWeatherParameters` | 26.x 没有该方法了，改为执行原版 `/weather <type> <秒>` 命令（`MinecraftServer.getCommands().performPrefixedCommand(...)`），默认 300 秒与 1.2.0 的 6000 tick 一致 |
+| OP 判定 | `source.hasPermission(2)` | 反射调 `CommandSourceStack.hasPermission(int)`，失败就当普通玩家 |
 | 事件 | Forge 事件总线 | `CommandRegistrationCallback` / `ServerTickEvents` / `ServerPlayConnectionEvents.DISCONNECT` / `ServerLifecycleEvents` |
 | 配置 | `config/mcai-common.toml`（ForgeConfigSpec） | `config/mcai-common.json`（公共核心 `AiSettings`） |
 
 ## 已知限制 / 风险
 
 - **本机无法联网跑 Gradle**：`maven.fabricmc.net` 在本机被阻断，构建全部走 GitHub Actions；
-  26.x 的 API 面（尤其 `Screenshot`、`CommandSourceStack` 权限、`PayloadTypeRegistry` /
-  `ServerPlayNetworking` 的 26.x 签名）以 CI 编译结果为准，如有差异按报错逐版本修。
+  26.x 的 API 面以 CI 编译结果为准。目前已按 CI 报错适配：`PayloadTypeRegistry` 新旧方法名探测、
+  天气改走原版 `/weather` 命令、`Attachment` 构造参数顺序。
 - **OP 判定**用反射调 `CommandSourceStack.hasPermission(int)`：26.x 权限 API 改过几轮，
   拿不到就当普通玩家（OP 会多走一次投票，不会崩）。
 - **无内置服务端附件支持**（见上）。客户端 `environment: client`，服务端 `environment: server`，
   两个 jar 不能同时装在同一客户端（服务端 jar 在客户端本来也不会加载）。
-- 客户端截图 API 只按 1.2.0 的 `Screenshot.takeScreenshot(getMainRenderTarget())` 写，
-  如果 26.x 改名，改一个方法即可（`ClientAttachmentTransfer#captureScreenshot`）。
+- 客户端截图用 `Screenshot.takeScreenshot(GameRenderer#mainRenderTarget())` + `NativeImage.asByteArray()`；
+  如果 26.x 再去掉这两个 API，改 `ClientAttachmentTransfer#captureScreenshot` 一处即可。

@@ -10,7 +10,6 @@ import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 
 import java.io.File;
@@ -141,23 +140,19 @@ public final class Weather {
 
         @Override
         public void applyWeather(String type, Integer durationSeconds) {
+            if (!"clear".equals(type) && !"rain".equals(type) && !"thunder".equals(type)) {
+                return;
+            }
             MinecraftServer server = McaiFabric.server();
             if (server == null) {
                 return;
             }
+            // 26.x 的 ServerLevel 已经没有 setWeatherParameters 了，直接执行原版 /weather 命令
+            // （和 NeoForge 26.x 版同方案）；1.2.0 无持续秒数时默认 6000 tick = 300 秒。
+            int seconds = durationSeconds == null ? 5 * 60 : Math.max(1, Math.min(1000000, durationSeconds));
             try {
-                ServerLevel level = server.overworld();
-                int ticks = durationSeconds == null
-                        ? WeatherVoteService.defaultDurationTicks()
-                        : Math.max(1, durationSeconds * 20);
-                switch (type) {
-                    case "clear" -> level.setWeatherParameters(ticks, 0, false, false);
-                    case "rain" -> level.setWeatherParameters(0, ticks, true, false);
-                    case "thunder" -> level.setWeatherParameters(0, ticks, true, true);
-                    default -> {
-                        return;
-                    }
-                }
+                server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
+                        "weather " + type + " " + seconds);
             } catch (Throwable broken) {
                 McaiFabric.LOGGER.error("[mcai] 设置天气失败：{}", broken.toString());
             }
