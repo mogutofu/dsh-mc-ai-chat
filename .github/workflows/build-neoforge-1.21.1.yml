@@ -1,0 +1,63 @@
+name: build-neoforge-1.21.1
+
+on:
+  push:
+    paths:
+      - 'platforms/neoforge/**'
+      - 'common/**'
+      - '.github/workflows/build-neoforge-1.21.1.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Gradle 9.2.1
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.2.1'
+
+      - name: Build server jar (mcai)
+        working-directory: platforms/neoforge/server
+        run: |
+          gradle wrapper --gradle-version 9.2.1 --distribution-type bin --no-daemon
+          ./gradlew build --no-daemon
+
+      - name: Build client jar (mcai_client)
+        working-directory: platforms/neoforge/client
+        run: |
+          gradle wrapper --gradle-version 9.2.1 --distribution-type bin --no-daemon
+          ./gradlew build --no-daemon
+
+      - name: Collect jars
+        run: |
+          mkdir -p platforms/neoforge/build/libs
+          cp platforms/neoforge/server/build/libs/*.jar platforms/neoforge/build/libs/
+          cp platforms/neoforge/client/build/libs/*.jar platforms/neoforge/build/libs/
+          ls -l platforms/neoforge/build/libs
+
+      - name: Inspect jars (metadata / entry classes)
+        run: |
+          for f in platforms/neoforge/build/libs/*.jar; do
+            echo "===== $f ($(stat -c%s "$f") bytes) ====="
+            sha256sum "$f"
+            echo "--- neoforge.mods.toml ---"
+            unzip -p "$f" META-INF/neoforge.mods.toml | grep -E 'modId|version=|displayName' || true
+            echo "--- key entries ---"
+            unzip -l "$f" | grep -E 'META-INF/neoforge.mods.toml|pack.mcmeta|McaiMod|McaiClientMod' || true
+          done
+
+      - name: Upload jars
+        uses: actions/upload-artifact@v4
+        with:
+          name: mcai-neoforge-1.21.1
+          path: platforms/neoforge/build/libs/*.jar
+          if-no-files-found: error

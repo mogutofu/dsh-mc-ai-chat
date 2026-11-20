@@ -1,0 +1,49 @@
+plugins {
+    id 'java'
+    id 'net.neoforged.moddev' version '2.0.148'
+}
+
+version = mod_version
+group = mod_group_id
+
+base {
+    archivesName = 'mc-ai-neoforge-1_21_1'
+}
+
+// 1.21.1 用户端是 Java 21
+java.toolchain.languageVersion = JavaLanguageVersion.of(21)
+
+// 直接复用仓库根目录的公共核心（common 是 Java 8、零依赖，不加额外依赖）
+sourceSets.main.java.srcDirs += file('../../../common/src/main/java')
+
+neoForge {
+    version = project.neo_version
+
+    runs {
+        server {
+            server()
+            programArgument '--nogui'
+        }
+    }
+
+    mods {
+        "${mod_id}" {
+            sourceSet(sourceSets.main)
+        }
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
+
+tasks.named('jar', Jar) {
+    // 产物名必须和 docs/PORTING-1.3.0.md 完全一致
+    archiveFileName = "mc-ai-neoforge-1_21_1-v${mod_version.replace('.', '_')}.jar"
+    manifest {
+        attributes(
+                'Implementation-Title'  : 'mc-ai-neoforge-1.21.1',
+                'Implementation-Version': project.version
+        )
+    }
+}
