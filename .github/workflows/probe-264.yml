@@ -1,0 +1,30 @@
+name: probe-264
+on:
+  push:
+    paths:
+      - '.github/workflows/probe-264.yml'
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Probe 26.4 support
+        run: |
+          set -x
+          echo '=== NeoForge versions matching 26.4 ==='
+          curl -sS -m 120 https://maven.neoforged.net/releases/net/neoforged/neoforge/maven-metadata.xml -o nf.xml
+          grep -oE '<version>[^<]*26\\.4[^<]*</version>' nf.xml | tail -30 || true
+          echo '=== Fabric game versions matching 26.4 ==='
+          curl -sS -m 120 https://meta.fabricmc.net/v2/versions/game -o game.json
+          grep -oE '"version": "26\\.4[^"]*"' game.json | head -20 || true
+          echo '=== Fabric loader latest ==='
+          curl -sS -m 120 https://meta.fabricmc.net/v2/versions/loader -o loader.json
+          head -c 400 loader.json || true
+          echo
+          echo '=== Fabric API versions matching 26.4 ==='
+          curl -sS -m 120 https://maven.fabricmc.net/net/fabricmc/fabric-api/fabric-api/maven-metadata.xml -o fapi.xml
+          grep -oE '<version>[^<]*26\\.4[^<]*</version>' fapi.xml | tail -30 || true
+          echo '=== Paper versions matching 26.4 ==='
+          curl -sS -m 60 -o paper.json https://fill.papermc.io/v3/projects/paper || true
+          head -c 2000 paper.json || true
