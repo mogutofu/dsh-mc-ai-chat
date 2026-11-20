@@ -1,0 +1,60 @@
+name: build-neoforge-26
+
+on:
+  push:
+    paths:
+      - 'platforms/neoforge-26.x/**'
+      - 'common/**'
+      - '.github/workflows/build-neoforge-26.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { mc: '26.1', java: '25', neo: '26.1.0.19-beta' }
+          - { mc: '26.2', java: '25', neo: '26.2.0.95' }
+          - { mc: '26.3', java: '25', neo: '26.3.0.113' }
+    name: MC ${{ matrix.mc }} / NeoForge ${{ matrix.neo }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ matrix.java }}
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '${{ matrix.java }}'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Make wrapper executable
+        run: chmod +x platforms/neoforge-26.x/gradlew
+
+      - name: Build
+        working-directory: platforms/neoforge-26.x
+        run: ./gradlew build --no-daemon -Pmc=${{ matrix.mc }} -Pneo=${{ matrix.neo }}
+
+      - name: Show built jars
+        if: always()
+        working-directory: platforms/neoforge-26.x
+        run: |
+          echo '--- build/libs'
+          ls -la build/libs 2>/dev/null || echo '(none)'
+          for f in build/libs/*.jar; do
+            [ -e "$f" ] || continue
+            echo "=== $f ($(stat -c %s "$f") bytes) sha256=$(sha256sum "$f" | cut -d' ' -f1)"
+            unzip -p "$f" META-INF/neoforge.mods.toml 2>/dev/null | grep -E 'modId|version|displayName' || true
+            unzip -l "$f" | grep -E '\.class$' | head -40
+          done
+
+      - name: Upload jars
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mcai-neoforge-${{ matrix.mc }}
+          path: platforms/neoforge-26.x/build/libs/*.jar
+          if-no-files-found: warn

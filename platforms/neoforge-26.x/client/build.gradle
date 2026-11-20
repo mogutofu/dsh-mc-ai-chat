@@ -1,0 +1,70 @@
+plugins {
+    id 'java-library'
+    id 'net.neoforged.moddev' version '2.0.148'
+}
+
+// MC / NeoForge 版本：CI 通过 -Pmc=... -Pneo=... 覆盖
+def mcVersion = providers.gradleProperty('mc').getOrElse('26.3')
+def neoVersion = providers.gradleProperty('neo').getOrElse('26.3.0.113')
+def modVersion = providers.gradleProperty('mod_version').getOrElse('1.3.0')
+
+def modId = 'mcai_client'
+def modName = 'Minecraft AI Chat Client'
+def mcSuffix = mcVersion.replace('.', '_')
+
+group = 'com.mogutofu.mcai.client'
+version = modVersion
+
+// MC 26.x 用 Java 25
+java.toolchain.languageVersion = JavaLanguageVersion.of(25)
+
+// 版本差异：26.1 的「主渲染目标」在 Minecraft#getMainRenderTarget()，
+// 26.2 起搬到 GameRenderer#mainRenderTarget()。截图实现按 -Pmc= 二选一编进来。
+def screenshotImpl = mcVersion.startsWith('26.1')
+        ? 'src/versioned/26_1/java'
+        : 'src/versioned/26_2plus/java'
+sourceSets.main.java.srcDir screenshotImpl
+
+neoForge {
+    version = neoVersion
+    mods {
+        mcai_client {
+            sourceSet(sourceSets.main)
+        }
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+}
+
+// 生成 META-INF/neoforge.mods.toml
+def generateModMetadata = tasks.register('generateModMetadata', ProcessResources) {
+    def replaceProperties = [
+            mod_id                 : modId,
+            mod_name               : modName,
+            mod_license            : 'MIT',
+            mod_version            : modVersion,
+            minecraft_version      : mcVersion,
+            minecraft_version_range: "[${mcVersion}]",
+            neo_version            : neoVersion,
+    ]
+    inputs.properties replaceProperties
+    expand replaceProperties
+    filteringCharset = 'UTF-8'
+    from 'src/main/templates'
+    into layout.buildDirectory.dir('generated/sources/modMetadata')
+}
+sourceSets.main.resources.srcDir generateModMetadata
+neoForge.ideSyncTask generateModMetadata
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
+
+tasks.named('jar', Jar) {
+    archiveFileName = "mc-ai-client-neoforge-${mcSuffix}-v${modVersion.replace('.', '_')}.jar"
+}

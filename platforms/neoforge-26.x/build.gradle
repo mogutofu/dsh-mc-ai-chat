@@ -1,0 +1,21 @@
+// mcai —— NeoForge 26.x 双端工程（server = mcai，client = mcai_client）。
+//
+// 一次构建产出两个 jar：
+//   server/build/libs/mc-ai-neoforge-<mc>-v1_3_0.jar
+//   client/build/libs/mc-ai-client-neoforge-<mc>-v1_3_0.jar
+// 根工程把两个 jar 汇总到 build/libs，CI 只上传这一个目录。
+
+tasks.register('build') {
+    group = 'build'
+    description = '构建 mcai（服务端）与 mcai_client（客户端）两个 jar，并汇总到根 build/libs'
+    dependsOn ':server:build', ':client:build'
+    doLast {
+        copy {
+            from project(':server').layout.buildDirectory.dir('libs')
+            from project(':client').layout.buildDirectory.dir('libs')
+            into layout.buildDirectory.dir('libs')
+        }
+        def out = layout.buildDirectory.dir('libs').get().asFile
+        out.listFiles()?.sort()?.each { println "mcai: ${it.name} (${it.length()} bytes)" }
+    }
+}

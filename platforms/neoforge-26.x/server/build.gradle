@@ -1,0 +1,70 @@
+plugins {
+    id 'java-library'
+    id 'net.neoforged.moddev' version '2.0.148'
+}
+
+// MC / NeoForge 版本：CI 通过 -Pmc=... -Pneo=... 覆盖
+def mcVersion = providers.gradleProperty('mc').getOrElse('26.3')
+def neoVersion = providers.gradleProperty('neo').getOrElse('26.3.0.113')
+def modVersion = providers.gradleProperty('mod_version').getOrElse('1.3.0')
+
+def modId = 'mcai'
+def modName = 'Minecraft AI Chat'
+def mcSuffix = mcVersion.replace('.', '_')
+
+group = 'com.mogutofu.mcai'
+version = modVersion
+
+// MC 26.x 用 Java 25
+java.toolchain.languageVersion = JavaLanguageVersion.of(25)
+
+sourceSets.main.resources {
+    exclude 'src/generated/**/.cache'
+}
+
+// 公共核心（/ai 的 HTTP、天气投票状态机、JSON），Java 8 语法，直接编进服务端 jar
+sourceSets.main.java.srcDirs += [rootProject.file('../../common/src/main/java')]
+
+neoForge {
+    version = neoVersion
+    mods {
+        mcai {
+            sourceSet(sourceSets.main)
+        }
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+}
+
+// 生成 META-INF/neoforge.mods.toml
+def generateModMetadata = tasks.register('generateModMetadata', ProcessResources) {
+    def replaceProperties = [
+            mod_id                 : modId,
+            mod_name               : modName,
+            mod_license            : 'MIT',
+            mod_version            : modVersion,
+            minecraft_version      : mcVersion,
+            minecraft_version_range: "[${mcVersion}]",
+            neo_version            : neoVersion,
+    ]
+    inputs.properties replaceProperties
+    expand replaceProperties
+    filteringCharset = 'UTF-8'
+    from 'src/main/templates'
+    into layout.buildDirectory.dir('generated/sources/modMetadata')
+}
+sourceSets.main.resources.srcDir generateModMetadata
+neoForge.ideSyncTask generateModMetadata
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
+
+tasks.named('jar', Jar) {
+    archiveFileName = "mc-ai-neoforge-${mcSuffix}-v${modVersion.replace('.', '_')}.jar"
+}

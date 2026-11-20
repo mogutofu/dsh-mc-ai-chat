@@ -1,0 +1,32 @@
+# mcai-client 客户端模组元数据（NeoForge 26.x）
+license="${mod_license}"
+
+[[mods]]
+modId="${mod_id}"
+version="${mod_version}"
+displayName="${mod_name}"
+description='''
+Minecraft AI Chat 的可选客户端模组：登录时告诉服务端「我装了 mcai-client」，
+收到请求后截图 / 读本地文件并分块发回去。只做附件，不联网、不碰 DSH。
+'''
+
+[[dependencies.${mod_id}]]
+    modId="neoforge"
+    type="required"
+    versionRange="[${neo_version},)"
+    ordering="NONE"
+    side="BOTH"
+
+[[dependencies.${mod_id}]]
+    modId="minecraft"
+    type="required"
+    versionRange="${minecraft_version_range}"
+    ordering="NONE"
+    side="BOTH"
+
+[[dependencies.${mod_id}]]
+    modId="mcai"
+    type="optional"
+    versionRange="[${mod_version},)"
+    ordering="NONE"
+    side="BOTH"
