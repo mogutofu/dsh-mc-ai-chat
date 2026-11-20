@@ -8,7 +8,7 @@ import com.mogutofu.mcai.client.net.ClientHelloPayload;
 import com.mogutofu.mcai.client.net.NetProtocol;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.neoforged.neoforge.network.PacketDistributor;
+import net.neoforged.neoforge.client.network.ClientPacketDistributor;
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
 import net.neoforged.neoforge.network.registration.PayloadRegistrar;
 
@@ -60,7 +60,7 @@ public final class ClientNet {
         if (!ready) {
             throw new IllegalStateException("mcai-client 网络通道未注册");
         }
-        PacketDistributor.sendToServer(payload);
+        ClientPacketDistributor.sendToServer(payload);
     }
 
     private static void onClientThread(Runnable runnable) {

@@ -3,16 +3,15 @@
 #
 # 构建（不管成功失败）之后跑，把这次要核对的 NeoForge / Minecraft 类打到 Actions 日志里：
 #   1) 找出 build/moddev/artifacts 与 Gradle 缓存里的 sources jar，解开到 /tmp/neo-src；
-#   2) 打印关键类的源码片段（有源码时）；
-#   3) 用 javap 打印关键类的公开签名（没源码时兜底）；
-#   4) grep 一批会变的方法名，确认 26.x 到底叫什么。
+#   2) 打印关键 NeoForge 类的源码片段（有源码时）；
+#   3) 用 javap 打印 Minecraft / FML 关键方法的签名（MC 没有源码，只能看签名）。
 #
 # 只在 CI 里跑，不影响产物。
 set -uo pipefail
 
 echo "===== env ====="
 java -version 2>&1 | head -3
-./gradlew --version 2>&1 | head -14 || true
+[ -x ./gradlew ] && ./gradlew --version 2>&1 | head -14 || echo '(gradlew not executable)'
 
 echo
 echo "===== build/moddev/artifacts ====="
@@ -52,68 +51,46 @@ show() {
   fi
 }
 
-g() {
-  echo
-  echo "########## GREP $1"
-  grep -rn --include='*.java' -m2 -E "$1" /tmp/neo-src 2>/dev/null | head -10 || true
-}
-
-show net/minecraft/network/protocol/common/custom/CustomPacketPayload.java 90
-show net/neoforged/neoforge/network/event/RegisterPayloadHandlersEvent.java 90
-show net/neoforged/neoforge/network/registration/PayloadRegistrar.java 160
-show net/neoforged/neoforge/network/registration/IPayloadContext.java 80
-show net/neoforged/neoforge/network/PacketDistributor.java 90
-show net/neoforged/neoforge/event/tick/ServerTickEvent.java 90
+show net/minecraft/network/protocol/common/custom/CustomPacketPayload.java 70
+show net/neoforged/neoforge/network/event/RegisterPayloadHandlersEvent.java 60
+show net/neoforged/neoforge/network/registration/PayloadRegistrar.java 130
+show net/neoforged/neoforge/network/handling/IPayloadContext.java 120
 show net/neoforged/neoforge/client/event/ClientPlayerNetworkEvent.java 90
-show net/neoforged/neoforge/event/RegisterCommandsEvent.java 60
-show net/neoforged/fml/loading/FMLPaths.java 60
-show net/neoforged/fml/common/EventBusSubscriber.java 60
 show net/minecraft/client/Screenshot.java 90
 
-g 'fromNamespaceAndPath'
-g 'class Identifier'
-g 'class ResourceLocation'
-g 'class NativeImage'
-g 'takeScreenshot\('
-g 'getMainRenderTarget\('
-g 'asByteArray\('
-g 'downloadTexture\('
-g 'setWeatherParameters'
-g 'record ServerTickEvent|class ServerTickEvent'
-g 'class ServerStartedEvent|class ServerStoppingEvent'
-g 'class PlayerLoggedOutEvent'
-g 'void sendSystemMessage'
-g 'hasPermissions\('
-g 'public int getPlayerCount|getPlayerCount\(\)'
-g 'List<ServerPlayer> getPlayers'
-g 'enqueueWork'
-g 'playToServer|playToClient|playBidirectional'
-g 'interface IPayloadContext'
-g 'class ServerboundCustomPayloadPacket|class ClientboundCustomPayloadPacket'
-g 'getGameProfile'
-
-echo
-echo "===== javap fallback ====="
+# MC 没有源码，只能看编译产物签名
 CP=""
-for j in $(find build/moddev/artifacts "$HOME/.gradle/caches/modules-2/files-2.1" -name '*.jar' 2>/dev/null | grep -v sources | head -60); do
+for j in $(find build/moddev/artifacts "$HOME/.gradle/caches/modules-2/files-2.1" -name '*.jar' 2>/dev/null | grep -v sources | head -80); do
   CP="$CP:$j"
 done
-jp() {
+jpk() {
   echo
-  echo "########## JAVAP $1"
-  javap -classpath "$CP" "$1" 2>&1 | head -70
+  echo "########## $1 | $2"
+  javap -classpath "$CP" "$1" 2>/dev/null | grep -E "$2" | head -25 || echo '  (no match / class missing)'
 }
-jp net.minecraft.network.protocol.common.custom.CustomPacketPayload
-jp net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent
-jp net.neoforged.neoforge.network.registration.PayloadRegistrar
-jp net.neoforged.neoforge.network.registration.IPayloadContext
-jp net.neoforged.neoforge.network.PacketDistributor
-jp net.neoforged.neoforge.event.tick.ServerTickEvent
-jp net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent
-jp net.neoforged.neoforge.event.RegisterCommandsEvent
-jp net.neoforged.fml.loading.FMLPaths
-jp net.neoforged.fml.loading.FMLEnvironment
-jp net.neoforged.fml.common.EventBusSubscriber
+
+jpk net.minecraft.commands.CommandSourceStack 'sendSystemMessage|sendSuccess|getPlayer|hasPermission|permissions'
+jpk net.minecraft.commands.Commands 'LEVEL_|hasPermission|literal|argument'
+jpk net.minecraft.network.FriendlyByteBuf 'writeUUID|readUUID|writeUtf|readUtf|writeByteArray|readByteArray|writeBoolean|writeInt|readInt|readBytes|writeBytes|writeByte|readByte'
+jpk net.minecraft.server.level.ServerLevel 'setWeather|rainLevel|thunderLevel'
+jpk net.minecraft.server.MinecraftServer 'overworld|getPlayerList|getCommands'
+jpk net.minecraft.server.players.PlayerList 'getPlayer|getPlayers|isOp'
+jpk net.minecraft.server.level.ServerPlayer 'sendSystemMessage|getGameProfile|permissions|getUUID'
+jpk net.minecraft.client.Screenshot 'takeScreenshot'
+jpk net.minecraft.client.Minecraft 'getMainRenderTarget|getConnection'
+jpk com.mojang.blaze3d.platform.NativeImage 'asByteArray|downloadTexture|flipY'
+jpk net.minecraft.resources.Identifier 'fromNamespaceAndPath'
+jpk net.minecraft.network.protocol.common.custom.CustomPacketPayload 'Type|codec'
+jpk net.minecraft.network.codec.StreamCodec 'of\('
+jpk net.minecraft.network.chat.Component 'literal|withStyle'
+jpk net.minecraft.ChatFormatting 'GOLD|AQUA|RED|GRAY'
+jpk net.neoforged.neoforge.network.handling.IPayloadContext 'player|enqueueWork'
+jpk net.neoforged.neoforge.network.PacketDistributor 'sendToPlayer'
+jpk net.neoforged.neoforge.client.network.ClientPacketDistributor 'sendToServer'
+jpk net.neoforged.fml.loading.FMLPaths 'GAMEDIR|CONFIGDIR'
+jpk net.neoforged.fml.loading.FMLEnvironment 'getDist|Dist'
+jpk net.neoforged.fml.common.EventBusSubscriber 'modid|value'
+jpk com.mojang.authlib.GameProfile 'name|getName'
 
 echo
 echo "===== done ====="

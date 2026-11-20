@@ -61,7 +61,7 @@ public final class PendingTransfers {
             sent = McaiNetwork.sendAttachmentRequest(player,
                     new AttachmentRequestPayload(transferId, kind, pending.path, maxBytes));
         } catch (RuntimeException error) {
-            McaiMod.LOGGER.warn("[mcai] 给 {} 发送附件请求失败", player.getGameProfile().getName(), error);
+            McaiMod.LOGGER.warn("[mcai] 给 {} 发送附件请求失败", player.getGameProfile().name(), error);
             sent = false;
         }
         if (!sent) {
@@ -160,7 +160,7 @@ public final class PendingTransfers {
         boolean image = pending.kind == NetProtocol.KIND_SCREENSHOT
                 || (pending.image && mediaType.startsWith("image/"));
         McaiMod.LOGGER.info("[mcai] 已收齐 {} 的{}附件：{}（{}，{} 字节，{} 块）",
-                player.getGameProfile().getName(),
+                player.getGameProfile().name(),
                 pending.kind == NetProtocol.KIND_SCREENSHOT ? "截图" : "文件",
                 fileName, mediaType, data.length, pending.chunkCount);
         ChatFeedback.thinking(player);
@@ -228,13 +228,13 @@ public final class PendingTransfers {
         if (player == null) {
             return;
         }
-        McaiMod.LOGGER.info("[mcai] 附件传输取消：{}（{}）", reason, player.getGameProfile().getName());
+        McaiMod.LOGGER.info("[mcai] 附件传输取消：{}（{}）", reason, player.getGameProfile().name());
         ChatFeedback.degradeToText(server, player, pending.message, reason);
     }
 
     private static MinecraftServer serverOf(MinecraftServer fallback, ServerPlayer player) {
         if (player != null) {
-            MinecraftServer server = player.getServer();
+            MinecraftServer server = player.level().getServer();
             if (server != null) {
                 return server;
             }

@@ -43,7 +43,7 @@ public final class AiBridge {
         }
         AiSettings settings = settings();
         UUID playerId = player.getUUID();
-        String playerName = player.getGameProfile().getName();
+        String playerName = player.getGameProfile().name();
         McaiMod.LOGGER.info("[mcai] {} 发起 /ai 请求（附件：{}）", playerName,
                 attachment == null ? "无" : attachment.name);
         AiClient.ask(settings, playerId, playerName, text == null ? "" : text, attachment,

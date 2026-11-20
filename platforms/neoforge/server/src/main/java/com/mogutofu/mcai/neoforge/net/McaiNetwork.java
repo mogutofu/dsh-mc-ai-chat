@@ -29,7 +29,7 @@ public final class McaiNetwork {
         if (ready) {
             return;
         }
-        if (FMLEnvironment.dist != Dist.DEDICATED_SERVER) {
+        if (!FMLEnvironment.getDist().isDedicatedServer()) {
             McaiMod.LOGGER.info("[mcai] 当前不是专用服务器，mcai:net 通道不注册（附件仅支持专用服务器）");
             return;
         }

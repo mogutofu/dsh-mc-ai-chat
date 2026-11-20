@@ -149,7 +149,16 @@ public final class WeatherFeature implements WeatherVoteService.Host {
         if (player == null) {
             return Actor.console();
         }
-        return Actor.player(player.getUUID(), player.getGameProfile().getName(), player.hasPermissions(2));
+        return Actor.player(player.getUUID(), player.getGameProfile().name(), isOperator(player));
+    }
+
+    /** OP 判定：26.x 的权限系统，>= 2 级（gamemasters）和 1.2.0 的 hasPermissions(2) 等价。 */
+    private static boolean isOperator(ServerPlayer player) {
+        try {
+            return Commands.LEVEL_GAMEMASTERS.check(player.permissions());
+        } catch (Throwable broken) {
+            return false;
+        }
     }
 
     // ── WeatherVoteService.Host ───────────────────────────────────────
@@ -157,7 +166,7 @@ public final class WeatherFeature implements WeatherVoteService.Host {
     @Override
     public int onlineCount() {
         MinecraftServer current = server;
-        return current == null ? 0 : current.getPlayerList().getPlayerCount();
+        return current == null ? 0 : current.getPlayerList().getPlayers().size();
     }
 
     @Override

@@ -32,7 +32,7 @@ public final class McaiServerEvents {
         MinecraftServer server = event.getServer();
         WeatherFeature.get().attach(server);
         McaiMod.LOGGER.info("[mcai] 服务端已启动，天气投票与附件通道就绪（在线 {} 人）",
-                server.getPlayerList().getPlayerCount());
+                server.getPlayerList().getPlayers().size());
     }
 
     @SubscribeEvent

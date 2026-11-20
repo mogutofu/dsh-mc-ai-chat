@@ -25,13 +25,13 @@ public final class ClientPresence {
         }
         if (protocolVersion != NetProtocol.PROTOCOL_VERSION) {
             McaiMod.LOGGER.warn("[mcai] 玩家 {} 的 mcai-client 协议版本 {} 与服务端 {} 不一致，忽略",
-                    player.getGameProfile().getName(), protocolVersion, NetProtocol.PROTOCOL_VERSION);
+                    player.getGameProfile().name(), protocolVersion, NetProtocol.PROTOCOL_VERSION);
             return;
         }
         Integer previous = HELLO.put(player.getUUID(), protocolVersion);
         if (previous == null) {
             McaiMod.LOGGER.info("[mcai] 玩家 {} 已安装 mcai-client（协议 {}），支持截图/文件附件",
-                    player.getGameProfile().getName(), protocolVersion);
+                    player.getGameProfile().name(), protocolVersion);
         }
     }
 

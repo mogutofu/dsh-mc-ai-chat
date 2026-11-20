@@ -17,7 +17,7 @@ public final class McaiPaths {
 
     public static File configDir() {
         try {
-            return FMLPaths.CONFIGDIR.get().toFile();
+            return FMLPaths.GAMEDIR.get().resolve("config").toFile();
         } catch (Throwable broken) {
             // 极端情况下（例如 FML 路径还没初始化）退回相对目录，不让指令直接崩
             return new File("config");
