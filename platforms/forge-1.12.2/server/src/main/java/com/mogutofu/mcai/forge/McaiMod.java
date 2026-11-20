@@ -64,8 +64,10 @@ public final class McaiMod {
         AiSettings.writeDefaultIfMissing(commonConfig());
 
         // 附件网络只在专用服务器注册：单机 integrated server 不支持，
-        // 客户端 JVM 里由 mcai-client 模组注册同名通道，避免同一 JVM 重复注册
-        if (FMLCommonHandler.instance().getSide() == Side.DEDICATED_SERVER) {
+        // 客户端 JVM 里由 mcai-client 模组注册同名通道，避免同一 JVM 重复注册。
+        // 1.12.2 的物理端枚举是 CLIENT/SERVER（没有 1.13+ 的 DEDICATED_SERVER），
+        // 客户端 JVM 里 getSide() 恒为 CLIENT，所以这里判 SERVER 就够了。
+        if (FMLCommonHandler.instance().getSide() == Side.SERVER) {
             McaiNetwork.register();
         } else {
             LOGGER.info("[mcai] 当前不是专用服务器，mcai:net 通道不注册（附件仅支持专用服务器）");

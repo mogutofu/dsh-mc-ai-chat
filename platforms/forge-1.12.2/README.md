@@ -6,10 +6,16 @@
 | 项 | 值 |
 | --- | --- |
 | Minecraft | 1.12.2 |
-| Forge | 14.23.5.2860 |
+| Forge（编译基座） | 14.23.5.2847，运行时兼容 1.12.2 各 Forge 版本 |
 | 构建 | ForgeGradle 2.3-SNAPSHOT + Gradle 4.10.3 + JDK 8 |
 | Mappings | snapshot_20171003 |
 | 频道 | `mcai:net`（协议版本 1） |
+
+> **为什么不是 14.23.5.2860**：Forge 官方 maven 上 1.12.2 的 14.23.5.2854 / 2855 / 2859 / 2860
+> 都没有 `-userdev` 制品（CI 探针实测 404），ForgeGradle 2.3 的 `extractUserdev` 直接失败。
+> 2847 是 1.12.2 最后一个有 userdev 的常用构建，API 与 2860 一致，编译出的 jar 里
+> `mcmod.info` / `@Mod` 仍写 1.12.2（`acceptedMinecraftVersions = "[1.12.2]"`），
+> 放到 14.23.5.2860 的服务端可直接用。
 
 ## 目录
 
