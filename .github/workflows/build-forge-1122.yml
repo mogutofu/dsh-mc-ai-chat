@@ -25,6 +25,18 @@ jobs:
           gradle-version: '4.10.3'
           validate-wrappers: false
 
+      - name: 仓库探针（定位可用的 userdev 制品）
+        run: |
+          set -x
+          for v in 1.12.2-14.23.5.2860 1.12.2-14.23.5.2859 1.12.2-14.23.5.2855 1.12.2-14.23.5.2854 1.12.2-14.23.5.2847; do
+            code=$(curl -sS -o /dev/null -w '%{http_code}' --range 0-0 "https://maven.minecraftforge.net/net/minecraftforge/forge/$v/forge-$v-userdev.jar" || echo ERR)
+            echo "USERDEV $v -> $code"
+          done
+          echo '--- listing 2860 ---'
+          curl -sS "https://maven.minecraftforge.net/net/minecraftforge/forge/1.12.2-14.23.5.2860/" | grep -oE 'href="[^"]+"' | head -40 || true
+          echo '--- metadata tail ---'
+          curl -sS "https://maven.minecraftforge.net/net/minecraftforge/forge/maven-metadata.xml" | grep -oE '1\.12\.2-14\.23\.5\.[0-9]+' | sort -u | tail -12 || true
+
       - name: 构建服务端 mcai
         working-directory: platforms/forge-1.12.2/server
         run: gradle build --no-daemon --console=plain --stacktrace
