@@ -1,0 +1,23 @@
+name: mc-ai
+version: '${version}'
+main: com.mogutofu.mcai.bukkit.McaiPlugin
+api-version: '1.20'
+authors: [mogutofu]
+description: Minecraft AI Chat for Bukkit/Spigot/Paper - /ai chat, /weather and /vote weather voting.
+website: https://github.com/mogutofu/dsh-mc-ai-chat
+commands:
+  ai:
+    description: Chat with the AI (Xiaotong); /ai message <text> is equivalent.
+    usage: /ai <text>
+    permission: mcai.ai
+  vote:
+    description: Vote on the current weather change (/vote yes|no|status).
+    usage: /vote yes|no|status
+    permission: mcai.vote
+permissions:
+  mcai.ai:
+    description: Use /ai
+    default: true
+  mcai.vote:
+    description: Use /vote
+    default: true
