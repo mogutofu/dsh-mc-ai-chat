@@ -25,17 +25,13 @@ jobs:
           gradle-version: '4.10.3'
           validate-wrappers: false
 
-      - name: 仓库探针（定位可用的 userdev 制品）
+      # 记录编译基座为什么选 2847：官方 maven 上 1.12.2 的 2854+ 没有 -userdev 制品
+      - name: userdev 制品探针
         run: |
-          set -x
           for v in 1.12.2-14.23.5.2860 1.12.2-14.23.5.2859 1.12.2-14.23.5.2855 1.12.2-14.23.5.2854 1.12.2-14.23.5.2847; do
             code=$(curl -sS -o /dev/null -w '%{http_code}' --range 0-0 "https://maven.minecraftforge.net/net/minecraftforge/forge/$v/forge-$v-userdev.jar" || echo ERR)
             echo "USERDEV $v -> $code"
           done
-          echo '--- listing 2860 ---'
-          curl -sS "https://maven.minecraftforge.net/net/minecraftforge/forge/1.12.2-14.23.5.2860/" | grep -oE 'href="[^"]+"' | head -40 || true
-          echo '--- metadata tail ---'
-          curl -sS "https://maven.minecraftforge.net/net/minecraftforge/forge/maven-metadata.xml" | grep -oE '1\.12\.2-14\.23\.5\.[0-9]+' | sort -u | tail -12 || true
 
       - name: 构建服务端 mcai
         working-directory: platforms/forge-1.12.2/server
@@ -48,8 +44,38 @@ jobs:
       - name: 列出产物与元数据
         run: |
           ls -l platforms/forge-1.12.2/server/build/libs platforms/forge-1.12.2/client/build/libs
-          unzip -p platforms/forge-1.12.2/server/build/libs/*.jar mcmod.info | head -20
-          unzip -p platforms/forge-1.12.2/client/build/libs/*.jar mcmod.info | head -20
+          unzip -p platforms/forge-1.12.2/server/build/libs/mc-ai-forge-1_12_2-v1_3_0.jar mcmod.info | head -20
+          unzip -p platforms/forge-1.12.2/client/build/libs/mc-ai-client-forge-1_12_2-v1_3_0.jar mcmod.info | head -20
+
+      # 运行级烟测：临时装一个 Forge 1.12.2 专用服务器，把两个 jar 丢进 mods，确认真的加载成功。
+      # 只做验证，失败不拦构建（产物照样上传），日志在 job 输出里。
+      - name: 运行级烟测（专用服务器加载 mod）
+        continue-on-error: true
+        run: |
+          set -x
+          mkdir -p smoke && cd smoke
+          curl -sSL -o forge-installer.jar "https://maven.minecraftforge.net/net/minecraftforge/forge/1.12.2-14.23.5.2847/forge-1.12.2-14.23.5.2847-installer.jar"
+          java -jar forge-installer.jar --installServer
+          echo "eula=true" > eula.txt
+          printf 'online-mode=false\nserver-port=25599\nlevel-name=world\nmax-tick-time=-1\n' > server.properties
+          mkdir -p mods
+          cp ../platforms/forge-1.12.2/server/build/libs/mc-ai-forge-1_12_2-v1_3_0.jar mods/
+          cp ../platforms/forge-1.12.2/client/build/libs/mc-ai-client-forge-1_12_2-v1_3_0.jar mods/
+          nohup java -Xmx2G -jar forge-1.12.2-14.23.5.2847.jar nogui > server.log 2>&1 &
+          for i in $(seq 1 48); do
+            grep -q 'Done (' server.log && break
+            pgrep -f 'forge-1.12.2-14.23.5.2847.jar' > /dev/null || break
+            sleep 5
+          done
+          sleep 5
+          pkill -f 'forge-1.12.2-14.23.5.2847.jar' || true
+          sleep 2
+          echo '===== mcai 相关日志 ====='
+          grep -nE '\[mcai|mcai-client|Done \(|Forge Mod Loader has|ERROR|Exception' server.log | head -80 || true
+          echo '===== 判定 ====='
+          grep -q '\[mcai\] 已注册 /ai、/weather、/vote' server.log && echo SMOKE_COMMANDS_REGISTERED || echo SMOKE_COMMANDS_MISSING
+          grep -q '\[mcai\] 已替换原版 /weather' server.log && echo SMOKE_WEATHER_REPLACED || echo SMOKE_WEATHER_NOT_REPLACED
+          grep -q '\[mcai-client\] 当前不是客户端环境' server.log && echo SMOKE_CLIENT_SKIPPED_ON_SERVER || echo SMOKE_CLIENT_SKIP_UNKNOWN
 
       - uses: actions/upload-artifact@v4
         with:

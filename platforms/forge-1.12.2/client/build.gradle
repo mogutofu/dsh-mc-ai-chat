@@ -49,3 +49,8 @@ jar {
         )
     }
 }
+
+// FG 2.3 默认会顺带生成 -sources.jar；交付只要 mod jar，关掉免得 artifact 里混入噪声
+afterEvaluate {
+    tasks.findByName('sourceJar')?.enabled = false
+}
