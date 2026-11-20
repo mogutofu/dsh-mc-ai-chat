@@ -50,6 +50,8 @@ tasks.named('processResources', ProcessResources).configure {
 }
 
 tasks.named('jar', Jar).configure {
+    // 统一发布名：mc-ai-client-forge-1_20_1-v1_3_0.jar
+    archiveFileName = "mc-ai-client-forge-1_20_1-v${project.version.replace('.', '_')}.jar"
     manifest {
         attributes([
                 'Specification-Title'     : mod_id,
