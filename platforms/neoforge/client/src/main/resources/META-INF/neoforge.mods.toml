@@ -1,0 +1,37 @@
+modLoader="javafml"
+loaderVersion="[1,)"
+license="MIT"
+
+[[mods]]
+modId="mcai_client"
+version="1.3.0"
+displayName="Minecraft AI Chat Client"
+authors="mogutofu"
+# 纯客户端选装模组：客户端有、服务端没有也不该弹红字
+displayTest="IGNORE_ALL_VERSION"
+description='''
+Optional client companion for Minecraft AI Chat (mcai): lets /ai screenshot and
+/ai file send the current screen or a local file to the AI. Requires the mcai
+server mod on the server side; without it this mod does nothing.
+'''
+
+[[dependencies.mcai_client]]
+modId="neoforge"
+type="required"
+versionRange="[21.1.0,)"
+ordering="NONE"
+side="BOTH"
+
+[[dependencies.mcai_client]]
+modId="minecraft"
+type="required"
+versionRange="[1.21.1,1.22)"
+ordering="NONE"
+side="BOTH"
+
+# 需要服务端装 mcai 才有附件请求；客户端本地没装服务端模组也能启动。
+[[dependencies.mcai_client]]
+modId="mcai"
+type="optional"
+versionRange="[1.3.0,)"
+ordering="NONE"

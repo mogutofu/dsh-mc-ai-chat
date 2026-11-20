@@ -1,0 +1,134 @@
+name: build-neoforge-1.21.1
+
+on:
+  push:
+    paths:
+      - 'platforms/neoforge/**'
+      - 'common/**'
+      - '.github/workflows/build-neoforge-1.21.1.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Gradle 9.2.1
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.2.1'
+
+      - name: Build server jar (mcai)
+        working-directory: platforms/neoforge/server
+        run: |
+          gradle wrapper --gradle-version 9.2.1 --distribution-type bin --no-daemon
+          ./gradlew build --no-daemon
+
+      - name: Build client jar (mcai_client)
+        working-directory: platforms/neoforge/client
+        run: |
+          gradle wrapper --gradle-version 9.2.1 --distribution-type bin --no-daemon
+          ./gradlew build --no-daemon
+
+      - name: Collect jars
+        run: |
+          mkdir -p platforms/neoforge/build/libs
+          cp platforms/neoforge/server/build/libs/*.jar platforms/neoforge/build/libs/
+          cp platforms/neoforge/client/build/libs/*.jar platforms/neoforge/build/libs/
+          ls -l platforms/neoforge/build/libs
+
+      - name: Inspect jars (metadata / entry classes)
+        run: |
+          for f in platforms/neoforge/build/libs/*.jar; do
+            echo "===== $f ($(stat -c%s "$f") bytes) ====="
+            sha256sum "$f"
+            echo "--- neoforge.mods.toml ---"
+            unzip -p "$f" META-INF/neoforge.mods.toml | grep -E 'modId|version=|displayName' || true
+            echo "--- key entries ---"
+            unzip -l "$f" | grep -E 'META-INF/neoforge.mods.toml|pack.mcmeta|McaiMod|McaiClientMod' || true
+          done
+
+      - name: Upload jars
+        uses: actions/upload-artifact@v4
+        with:
+          name: mcai-neoforge-1.21.1
+          path: platforms/neoforge/build/libs/*.jar
+          if-no-files-found: error
+
+  # 运行级烟测：手动触发时额外起一个开发服务器，确认 mod 能加载、指令能注册。
+  smoke:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Gradle 9.2.1
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.2.1'
+
+      - name: Run dev server (start + command smoke test)
+        working-directory: platforms/neoforge/server
+        run: |
+          set -u
+          mkdir -p run
+          echo "eula=true" > run/eula.txt
+          # 打开 RCON，烟测脚本用它在控制台执行 /weather、/ai、/vote status
+          {
+            echo "enable-rcon=true"
+            echo "rcon.port=25575"
+            echo "rcon.password=mcai-smoke"
+            echo "online-mode=false"
+          } > run/server.properties
+          gradle wrapper --gradle-version 9.2.1 --distribution-type bin --no-daemon
+          ./gradlew runServer --no-daemon --console=plain > server-run.log 2>&1 &
+          GPID=$!
+          for i in $(seq 1 200); do
+            if grep -q "RCON running" server-run.log 2>/dev/null; then break; fi
+            if ! kill -0 "$GPID" 2>/dev/null; then break; fi
+            sleep 2
+          done
+          python3 ../tools/rcon-smoke.py | tee rcon-out.txt
+          for i in $(seq 1 60); do
+            if grep -q "Stopping server" server-run.log 2>/dev/null; then break; fi
+            if ! kill -0 "$GPID" 2>/dev/null; then break; fi
+            sleep 2
+          done
+          kill "$GPID" 2>/dev/null || true
+          wait "$GPID" 2>/dev/null || true
+          echo "===== STARTUP MARKERS ====="
+          grep -E "Done \(|已注册 /ai|已替换原版 /weather|已注册 mcai:net|Minecraft AI Chat 已加载|RCON running" server-run.log || true
+          echo "===== COMMAND RESPONSES ====="
+          cat rcon-out.txt || true
+          echo "===== ASSERTIONS ====="
+          grep -q "Minecraft AI Chat 已加载" server-run.log
+          grep -q "已注册 /ai、/weather 与 /vote" server-run.log
+          grep -q "已注册 mcai:net 附件载荷" server-run.log
+          grep -q "Done (" server-run.log
+          grep -qF "用法：/weather clear|rain|thunder" rcon-out.txt
+          grep -qF "用法：/ai <内容>" rcon-out.txt
+          grep -qF "只有游戏内玩家能投票" rcon-out.txt
+
+      - name: Upload server log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mcai-neoforge-1.21.1-smoke-log
+          path: |
+            platforms/neoforge/server/server-run.log
+            platforms/neoforge/server/rcon-out.txt
+          if-no-files-found: warn
