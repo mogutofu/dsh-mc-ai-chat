@@ -21,7 +21,8 @@ sourceCompatibility = '1.8'
 targetCompatibility = '1.8'
 
 minecraft {
-    version = '1.12.2-14.23.5.2860'
+    // 同服务端：14.23.5.2854+ 在官方 maven 上没有 -userdev 制品，编译基座用 2847
+    version = '1.12.2-14.23.5.2847'
     runDir = 'run'
     mappings = 'snapshot_20171003'
 }

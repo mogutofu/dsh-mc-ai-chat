@@ -21,7 +21,10 @@ sourceCompatibility = '1.8'
 targetCompatibility = '1.8'
 
 minecraft {
-    version = '1.12.2-14.23.5.2860'
+    // 编译基座用 14.23.5.2847：Forge 官方 maven 上 14.23.5.2854/2855/2859/2860 都没有
+    // -userdev 制品（CI 探针实测 404），ForgeGradle 2.3 起不来；2847 是 1.12.2 有 userdev
+    // 的最后一个常用构建。编译出的 jar 的 mcmod.info / @Mod 仍是 1.12.2，2860 服务端可直接用。
+    version = '1.12.2-14.23.5.2847'
     runDir = 'run'
     mappings = 'snapshot_20171003'
 }
