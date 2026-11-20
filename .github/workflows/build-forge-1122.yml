@@ -1,0 +1,108 @@
+name: build-forge-1.12.2
+on:
+  push:
+    paths:
+      - 'platforms/forge-1.12.2/**'
+      - 'common/**'
+      - '.github/workflows/build-forge-1122.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # ForgeGradle 2.3 只认 JDK 8
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '8'
+
+      # Gradle 4.10.3 是最后一个跑在 Java 8 上的版本，FG 2.3 用它；工程里不带 wrapper
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '4.10.3'
+          validate-wrappers: false
+
+      # 记录编译基座为什么选 2847：官方 maven 上 1.12.2 的 2854+ 没有 -userdev 制品
+      - name: userdev 制品探针
+        run: |
+          for v in 1.12.2-14.23.5.2860 1.12.2-14.23.5.2859 1.12.2-14.23.5.2855 1.12.2-14.23.5.2854 1.12.2-14.23.5.2847; do
+            code=$(curl -sS -o /dev/null -w '%{http_code}' --range 0-0 "https://maven.minecraftforge.net/net/minecraftforge/forge/$v/forge-$v-userdev.jar" || echo ERR)
+            echo "USERDEV $v -> $code"
+          done
+
+      - name: 构建服务端 mcai
+        working-directory: platforms/forge-1.12.2/server
+        run: gradle build --no-daemon --console=plain --stacktrace
+
+      - name: 构建客户端 mcai_client
+        working-directory: platforms/forge-1.12.2/client
+        run: gradle build --no-daemon --console=plain --stacktrace
+
+      - name: 列出产物与元数据
+        run: |
+          ls -l platforms/forge-1.12.2/server/build/libs platforms/forge-1.12.2/client/build/libs
+          unzip -p platforms/forge-1.12.2/server/build/libs/mc-ai-forge-1_12_2-v1_3_0.jar mcmod.info | head -20
+          unzip -p platforms/forge-1.12.2/client/build/libs/mc-ai-client-forge-1_12_2-v1_3_0.jar mcmod.info | head -20
+
+      # 运行级烟测：临时装一个 Forge 1.12.2 专用服务器，把两个 jar 丢进 mods，
+      # 真起一次服确认 mod 加载 + /ai /weather /vote 注册。判定不过就红，日志整份上传。
+      - name: 运行级烟测（专用服务器加载 mod）
+        run: |
+          set -euxo pipefail
+          mkdir -p smoke && cd smoke
+          curl -sSL -o forge-installer.jar "https://maven.minecraftforge.net/net/minecraftforge/forge/1.12.2-14.23.5.2847/forge-1.12.2-14.23.5.2847-installer.jar"
+          java -jar forge-installer.jar --installServer
+          SERVER_JAR=$(ls forge-1.12.2-14.23.5.2847-universal.jar)
+          echo "server jar: $SERVER_JAR"
+          echo "eula=true" > eula.txt
+          printf 'online-mode=false\nserver-port=25599\nmax-tick-time=-1\n' > server.properties
+          mkdir -p mods
+          cp ../platforms/forge-1.12.2/server/build/libs/mc-ai-forge-1_12_2-v1_3_0.jar mods/
+          cp ../platforms/forge-1.12.2/client/build/libs/mc-ai-client-forge-1_12_2-v1_3_0.jar mods/
+          nohup java -Xmx2G -jar "$SERVER_JAR" nogui > server.log 2>&1 &
+          for i in $(seq 1 24); do
+            grep -q 'Done (' server.log && break
+            sleep 5
+          done
+          pkill -f 'forge-1.12.2-14.23.5.2847-universal.jar' || true
+          sleep 2
+          echo '===== mcai 相关日志 ====='
+          grep -E '\[mcai' server.log || true
+          echo '===== 判定 ====='
+          if ! grep -q 'Done (' server.log; then
+            echo 'SMOKE_FAIL: 服务器没起到 Done ('
+            tail -100 server.log
+            exit 1
+          fi
+          if ! grep -q '\[mcai\] 已注册 /ai、/weather、/vote' server.log; then
+            echo 'SMOKE_FAIL: 没看到 /ai /weather /vote 注册日志'
+            exit 1
+          fi
+          if ! grep -q '\[mcai\] 已替换原版 /weather' server.log; then
+            echo 'SMOKE_FAIL: 没看到替换原版 /weather 的日志'
+            exit 1
+          fi
+          if grep -qE '\[(ERROR|FATAL)\] \[mcai' server.log; then
+            echo 'SMOKE_FAIL: mcai 打了 ERROR/FATAL'
+            exit 1
+          fi
+          echo 'SMOKE_OK: 专服启动完成并加载 mcai（/ai、/weather、/vote 已注册，原版 /weather 已替换）'
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mcai-forge-1.12.2
+          path: |
+            platforms/forge-1.12.2/server/build/libs/*.jar
+            platforms/forge-1.12.2/client/build/libs/*.jar
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mcai-forge-1.12.2-smoke-log
+          path: smoke/server.log
+          if-no-files-found: error
