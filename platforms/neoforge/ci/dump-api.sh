@@ -1,96 +1,81 @@
 #!/usr/bin/env bash
-# mcai NeoForge 26.x API 自查脚本。
+# mcai NeoForge 26.x API 自查脚本（只在 CI 里跑）。
 #
-# 构建（不管成功失败）之后跑，把这次要核对的 NeoForge / Minecraft 类打到 Actions 日志里：
-#   1) 找出 build/moddev/artifacts 与 Gradle 缓存里的 sources jar，解开到 /tmp/neo-src；
-#   2) 打印关键 NeoForge 类的源码片段（有源码时）；
-#   3) 用 javap 打印 Minecraft / FML 关键方法的签名（MC 没有源码，只能看签名）。
-#
-# 只在 CI 里跑，不影响产物。
+# 构建（不管成功失败）之后执行，把这次要核对的 NeoForge / Minecraft 类打到 Actions 日志里：
+#   1) 打印 NFRT 的 artifact manifest，并按里面的路径收集 jar；
+#   2) 解开所有 sources jar（NeoForge 有源码，MC 一般没有）到 /tmp/neo-src；
+#   3) 用编译 classpath javap 一批 Minecraft 类，确认方法名（26.x 改动大）。
 set -uo pipefail
 
 echo "===== env ====="
 java -version 2>&1 | head -3
-[ -x ./gradlew ] && ./gradlew --version 2>&1 | head -14 || echo '(gradlew not executable)'
 
 echo
-echo "===== build/moddev/artifacts ====="
-ls -la build/moddev/artifacts 2>/dev/null || echo '(no build/moddev/artifacts)'
+echo "===== NFRT manifest ====="
+for m in build/tmp/createMinecraftArtifacts/nfrt_artifact_manifest.properties server/build/tmp/createMinecraftArtifacts/nfrt_artifact_manifest.properties; do
+  if [ -f "$m" ]; then
+    echo "--- $m"
+    cat "$m"
+  fi
+done
 
 echo
 echo "===== jars under build/ ====="
-find build -name '*.jar' -printf '%s\t%p\n' 2>/dev/null | sort -n | head -30 || echo '(none)'
+find build -name '*.jar' -printf '%s\t%p\n' 2>/dev/null | sort -n | head -40 || echo '(none)'
 
+# manifest 里记的 artifact 路径（形如 /home/runner/.gradle/.../xxx.jar）
+ART_JARS=$(grep -ohE '/[^ =:]+\.jar' build/tmp/createMinecraftArtifacts/*.properties \
+  server/build/tmp/createMinecraftArtifacts/*.properties 2>/dev/null | sort -u)
 echo
-echo "===== neoforge/minecraft jars in gradle cache ====="
-find "$HOME/.gradle/caches/modules-2/files-2.1" -name '*.jar' -printf '%s\t%p\n' 2>/dev/null \
-  | grep -Ei 'neoforge|neoform|minecraft' | sort -n | head -30 || true
+echo "===== artifacts from manifest ====="
+echo "${ART_JARS:-(none)}"
 
 rm -rf /tmp/neo-src
 mkdir -p /tmp/neo-src
-SRC_JARS=$(find build/moddev/artifacts "$HOME/.gradle/caches/modules-2/files-2.1" -name '*sources*.jar' 2>/dev/null | tr '\n' ' ')
+SRC_JARS=$(printf '%s\n' "$ART_JARS" \
+  $(find build "$HOME/.gradle/caches/modules-2/files-2.1" -name '*sources*.jar' 2>/dev/null) \
+  | grep -E 'sources.*\.jar$' | sort -u | tr '\n' ' ')
 echo
 echo "===== sources jars ====="
-echo "${SRC_JARS:-(none found)}"
-if [ -n "${SRC_JARS// /}" ]; then
-  for j in $SRC_JARS; do
-    echo "-- extracting $j"
-    unzip -qo "$j" -d /tmp/neo-src 2>/dev/null
-  done
-  echo "extracted java files: $(find /tmp/neo-src -name '*.java' | wc -l)"
-fi
-
-show() {
-  local p="/tmp/neo-src/$1" n="${2:-120}"
-  echo
-  echo "########## SOURCE $1"
-  if [ -f "$p" ]; then
-    sed -n "1,${n}p" "$p"
-  else
-    echo "(source not found)"
-  fi
-}
-
-show net/minecraft/network/protocol/common/custom/CustomPacketPayload.java 70
-show net/neoforged/neoforge/network/event/RegisterPayloadHandlersEvent.java 60
-show net/neoforged/neoforge/network/registration/PayloadRegistrar.java 130
-show net/neoforged/neoforge/network/handling/IPayloadContext.java 120
-show net/neoforged/neoforge/client/event/ClientPlayerNetworkEvent.java 90
-show net/minecraft/client/Screenshot.java 90
-
-# MC 没有源码，只能看编译产物签名
-CP=""
-for j in $(find build/moddev/artifacts "$HOME/.gradle/caches/modules-2/files-2.1" -name '*.jar' 2>/dev/null | grep -v sources | head -80); do
-  CP="$CP:$j"
+echo "${SRC_JARS:-(none)}"
+for j in $SRC_JARS; do
+  echo "-- extracting $j"
+  unzip -qo "$j" -d /tmp/neo-src 2>/dev/null
 done
+echo "extracted java files: $(find /tmp/neo-src -name '*.java' | wc -l)"
+
+# 编译 classpath：MDG 生成的 MC 类在这里，javap 用
+CP=$(./gradlew -q --no-daemon printCompileCp 2>/dev/null | sed -n 's/^CP_SERVER=//p;s/^CP_CLIENT=//p' | tr '\n' ':')
+echo
+echo "===== compile classpath entries: $(echo "$CP" | tr ':' '\n' | grep -c .) ====="
+
 jpk() {
   echo
   echo "########## $1 | $2"
-  javap -classpath "$CP" "$1" 2>/dev/null | grep -E "$2" | head -25 || echo '  (no match / class missing)'
+  javap -classpath "$CP" "$1" 2>/dev/null | grep -E "$2" | head -30 || echo '  (no match / class missing)'
 }
 
+jpk net.minecraft.client.Screenshot ''
+jpk com.mojang.blaze3d.platform.NativeImage ''
+jpk net.minecraft.client.Minecraft 'RenderTarget|renderTarget|Screenshot|Window|getWindow'
+jpk net.minecraft.server.level.ServerLevel 'Weather|weather|Rain|Thunder'
+jpk net.minecraft.world.level.Level 'Weather|weather|Rain|Thunder'
+jpk net.minecraft.server.MinecraftServer 'overworld|getPlayerList|getCommands|execute'
 jpk net.minecraft.commands.CommandSourceStack 'sendSystemMessage|sendSuccess|getPlayer|hasPermission|permissions'
 jpk net.minecraft.commands.Commands 'LEVEL_|hasPermission|literal|argument'
-jpk net.minecraft.network.FriendlyByteBuf 'writeUUID|readUUID|writeUtf|readUtf|writeByteArray|readByteArray|writeBoolean|writeInt|readInt|readBytes|writeBytes|writeByte|readByte'
-jpk net.minecraft.server.level.ServerLevel 'setWeather|rainLevel|thunderLevel'
-jpk net.minecraft.server.MinecraftServer 'overworld|getPlayerList|getCommands'
+jpk net.minecraft.network.FriendlyByteBuf 'writeUUID|readUUID|writeUtf|readUtf|writeBoolean|writeInt|readInt|writeBytes|readBytes|writeByte|readByte'
 jpk net.minecraft.server.players.PlayerList 'getPlayer|getPlayers|isOp'
 jpk net.minecraft.server.level.ServerPlayer 'sendSystemMessage|getGameProfile|permissions|getUUID'
-jpk net.minecraft.client.Screenshot 'takeScreenshot'
-jpk net.minecraft.client.Minecraft 'getMainRenderTarget|getConnection'
-jpk com.mojang.blaze3d.platform.NativeImage 'asByteArray|downloadTexture|flipY'
 jpk net.minecraft.resources.Identifier 'fromNamespaceAndPath'
-jpk net.minecraft.network.protocol.common.custom.CustomPacketPayload 'Type|codec'
-jpk net.minecraft.network.codec.StreamCodec 'of\('
-jpk net.minecraft.network.chat.Component 'literal|withStyle'
-jpk net.minecraft.ChatFormatting 'GOLD|AQUA|RED|GRAY'
-jpk net.neoforged.neoforge.network.handling.IPayloadContext 'player|enqueueWork'
-jpk net.neoforged.neoforge.network.PacketDistributor 'sendToPlayer'
-jpk net.neoforged.neoforge.client.network.ClientPacketDistributor 'sendToServer'
-jpk net.neoforged.fml.loading.FMLPaths 'GAMEDIR|CONFIGDIR'
-jpk net.neoforged.fml.loading.FMLEnvironment 'getDist|Dist'
-jpk net.neoforged.fml.common.EventBusSubscriber 'modid|value'
-jpk com.mojang.authlib.GameProfile 'name|getName'
+jpk net.minecraft.client.multiplayer.ClientPacketListener 'send|getConnection'
+jpk net.minecraft.client.multiplayer.ClientLevel 'class'
+
+echo
+echo "===== class name scan (weather / screenshot) ====="
+printf '%s' "$CP" | tr ':' '\n' | while read -r entry; do
+  [ -f "$entry" ] || continue
+  case "$entry" in *.jar) unzip -l "$entry" 2>/dev/null | grep -E 'Weather|Screenshot|RenderTarget' | awk '{print $4}' | head -20 ;; esac
+done | sort -u | head -40
 
 echo
 echo "===== done ====="
