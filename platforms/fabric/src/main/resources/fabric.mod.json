@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "id": "mcai",
+  "version": "${mod_version}",
+  "name": "Minecraft AI Chat",
+  "description": "游戏内 /ai 文字聊天，配合可选客户端模组 mcai-client 还能发截图/本地文件；/weather + /vote 天气投票。请求发到本机 DSH 服务 127.0.0.1:8765（服务端需要 dsh-mc-server-ops）。",
+  "authors": [
+    "mogutofu"
+  ],
+  "contact": {
+    "homepage": "https://github.com/mogutofu/dsh-mc-ai-chat",
+    "sources": "https://github.com/mogutofu/dsh-mc-ai-chat"
+  },
+  "license": "MIT",
+  "environment": "server",
+  "entrypoints": {
+    "main": [
+      "com.mogutofu.mcai.fabric.McaiFabric"
+    ]
+  },
+  "depends": {
+    "fabricloader": ">=0.20.1",
+    "minecraft": "~${mc_version}",
+    "java": ">=25",
+    "fabric-api": "*"
+  }
+}

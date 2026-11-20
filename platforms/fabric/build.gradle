@@ -1,0 +1,130 @@
+plugins {
+    id 'net.fabricmc.fabric-loom' version "${loom_version}"
+}
+
+version = '1.3.0'
+group = 'com.mogutofu.mcai'
+
+def mcVersion = (findProperty('mc') ?: project.minecraft_version ?: '26.3').toString()
+def mcSuffix = mcVersion.replace('.', '_')
+def modVersionSuffix = 'v' + project.version.toString().replace('.', '_')
+
+// fabric-api 版本：CI 用 -Pfabric_api=<查 maven-metadata 得到的最新稳定版>，
+// 本地可以用 gradle.properties 里的默认值（26.1 故意留空，不猜）。
+def fabricApiVersion = (findProperty('fabric_api') ?: findProperty("fabric_api_version_${mcSuffix}") ?: '').toString().trim()
+if (!fabricApiVersion) {
+    throw new GradleException("缺少 fabric-api 版本：MC ${mcVersion} 没有默认值，请用 -Pfabric_api=<version> 指定")
+}
+
+loom {
+    // main = 服务端 mcai；client = 客户端 mcai_client，两个 jar 分开打
+    splitEnvironmentSourceSets()
+
+    mods {
+        "mcai" {
+            sourceSet sourceSets.main
+        }
+        "mcai_client" {
+            sourceSet sourceSets.client
+        }
+    }
+}
+
+dependencies {
+    minecraft "com.mojang:minecraft:${mcVersion}"
+    implementation "net.fabricmc:fabric-loader:${project.loader_version}"
+    implementation "net.fabricmc.fabric-api:fabric-api:${fabricApiVersion}"
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(25)
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.release = 25
+}
+
+// 公共核心：直接加进服务端源码集（Java 8 语法，零依赖）
+sourceSets.main.java.srcDirs += rootProject.file('../../common/src/main/java')
+
+def expandProps = [
+        mc_version : mcVersion,
+        mod_version: project.version.toString(),
+]
+
+tasks.named('processResources', ProcessResources) {
+    filteringCharset = 'UTF-8'
+    inputs.properties expandProps
+    filesMatching('fabric.mod.json') {
+        expand expandProps
+    }
+}
+
+// 客户端源码集在 Loom 的 splitEnvironmentSourceSets() 里叫 client，
+// 它的资源处理任务叫 processClientResources。
+tasks.named('processClientResources', ProcessResources) {
+    filteringCharset = 'UTF-8'
+    inputs.properties expandProps
+    filesMatching('fabric.mod.json') {
+        expand expandProps
+    }
+}
+
+// ── 两个 jar：服务端 mcai / 客户端 mcai_client ────────────────────────────
+// 不用默认的 `jar`：Loom 的 splitEnvironmentSourceSets() 会把它当成 main+client 的
+// 混合 jar（还会出现两份 fabric.mod.json）。这里自己注册两个 Jar 任务，
+// build/libs 里只留契约要求的最终产物。
+def serverJarName = "mc-ai-fabric-${mcSuffix}-${modVersionSuffix}.jar"
+def clientJarName = "mc-ai-client-fabric-${mcSuffix}-${modVersionSuffix}.jar"
+
+tasks.register('serverJar', Jar) {
+    group = 'build'
+    description = '服务端模组 jar（mcai）'
+    archiveFileName = serverJarName
+    from sourceSets.main.output
+    from(rootProject.file('../../LICENSE')) {
+        rename { 'LICENSE_mcai' }
+    }
+    manifest {
+        attributes(
+                'Implementation-Title': 'mc-ai-fabric',
+                'Implementation-Version': project.version
+        )
+    }
+}
+
+tasks.register('clientJar', Jar) {
+    group = 'build'
+    description = '客户端模组 jar（mcai_client：登录 hello + 截图/文件分块上传）'
+    archiveFileName = clientJarName
+    from sourceSets.client.output
+    from(rootProject.file('../../LICENSE')) {
+        rename { 'LICENSE_mcai_client' }
+    }
+    manifest {
+        attributes(
+                'Implementation-Title': 'mc-ai-client-fabric',
+                'Implementation-Version': project.version
+        )
+    }
+}
+
+// 默认 jar 不产出任何被上传的产物；非 remapping 的 26.x 一般没有 remapJar，
+// 万一这个 Loom 版本生成它，也一并关掉，避免它去 remap 一个被禁用的 jar。
+tasks.named('jar') {
+    enabled = false
+}
+tasks.matching { it.name == 'remapJar' }.configureEach {
+    enabled = false
+}
+
+// build / assemble 都要产出这两个 jar
+tasks.named('assemble') {
+    dependsOn 'serverJar', 'clientJar'
+}
+tasks.named('build') {
+    dependsOn 'serverJar', 'clientJar'
+}

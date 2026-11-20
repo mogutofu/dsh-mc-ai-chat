@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "id": "mcai_client",
+  "version": "${mod_version}",
+  "name": "Minecraft AI Chat Client",
+  "description": "mcai 的可选客户端模组：/ai screenshot 和 /ai file 需要它来截图、读本地文件并分块发回服务器。",
+  "authors": [
+    "mogutofu"
+  ],
+  "contact": {
+    "homepage": "https://github.com/mogutofu/dsh-mc-ai-chat",
+    "sources": "https://github.com/mogutofu/dsh-mc-ai-chat"
+  },
+  "license": "MIT",
+  "environment": "client",
+  "entrypoints": {
+    "client": [
+      "com.mogutofu.mcai.client.McaiClientFabric"
+    ]
+  },
+  "depends": {
+    "fabricloader": ">=0.20.1",
+    "minecraft": "~${mc_version}",
+    "java": ">=25",
+    "fabric-api": "*"
+  }
+}
