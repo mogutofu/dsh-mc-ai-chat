@@ -1,0 +1,48 @@
+name: build-forge-1.12.2
+on:
+  push:
+    paths:
+      - 'platforms/forge-1.12.2/**'
+      - 'common/**'
+      - '.github/workflows/build-forge-1122.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # ForgeGradle 2.3 只认 JDK 8
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '8'
+
+      # Gradle 4.10.3 是最后一个跑在 Java 8 上的版本，FG 2.3 用它；工程里不带 wrapper
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '4.10.3'
+          validate-wrappers: false
+
+      - name: 构建服务端 mcai
+        working-directory: platforms/forge-1.12.2/server
+        run: gradle build --no-daemon --console=plain --stacktrace
+
+      - name: 构建客户端 mcai_client
+        working-directory: platforms/forge-1.12.2/client
+        run: gradle build --no-daemon --console=plain --stacktrace
+
+      - name: 列出产物与元数据
+        run: |
+          ls -l platforms/forge-1.12.2/server/build/libs platforms/forge-1.12.2/client/build/libs
+          unzip -p platforms/forge-1.12.2/server/build/libs/*.jar mcmod.info | head -20
+          unzip -p platforms/forge-1.12.2/client/build/libs/*.jar mcmod.info | head -20
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mcai-forge-1.12.2
+          path: |
+            platforms/forge-1.12.2/server/build/libs/*.jar
+            platforms/forge-1.12.2/client/build/libs/*.jar
+          if-no-files-found: error
