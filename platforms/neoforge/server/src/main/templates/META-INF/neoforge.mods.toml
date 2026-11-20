@@ -1,0 +1,33 @@
+# mcai 服务端模组元数据（NeoForge 26.x）
+license="${mod_license}"
+
+[[mods]]
+modId="${mod_id}"
+version="${mod_version}"
+displayName="${mod_name}"
+description='''
+Minecraft AI Chat：把游戏里的 /ai <内容> 发给本机 DSH 服务，再把回复贴回聊天栏。
+带 /ai screenshot、/ai file 客户端附件通道（需要客户端装 mcai-client），
+并把需要 OP 的原版 /weather 换成所有玩家都能用的 /weather + /vote 天气投票。
+'''
+
+[[dependencies.${mod_id}]]
+    modId="neoforge"
+    type="required"
+    versionRange="[${neo_version},)"
+    ordering="NONE"
+    side="BOTH"
+
+[[dependencies.${mod_id}]]
+    modId="minecraft"
+    type="required"
+    versionRange="${minecraft_version_range}"
+    ordering="NONE"
+    side="BOTH"
+
+[[dependencies.${mod_id}]]
+    modId="mcai_client"
+    type="optional"
+    versionRange="[${mod_version},)"
+    ordering="NONE"
+    side="CLIENT"
