@@ -45,8 +45,9 @@ cd platforms/fabric
 gradle build --no-daemon -Pmc=26.3 -Pfabric_api=0.166.2+26.3
 ```
 
-`gradle.properties` 里 26.2 / 26.3 有已知默认值，**26.1 故意留空**（本机无法联网核实，
-必须由 CI 解析或手动 `-Pfabric_api=` 传入）。
+`gradle.properties` 里三个版本都有默认 fabric-api（26.1 = `0.145.1+26.1`、
+26.2 = `0.161.0+26.2`、26.3 = `0.166.2+26.3`，都来自 CI 实际解析结果），本地可以不带
+`-Pfabric_api`；CI 仍会重新查 maven-metadata.xml 取各分支最新稳定版。
 
 > 说明：仓库里没有提交 `gradle/wrapper/gradle-wrapper.jar`（本机沙箱里拿不到二进制），
 > CI 用 setup-gradle 安装的 Gradle 9.8.2 构建；需要 wrapper 时可以跑一次

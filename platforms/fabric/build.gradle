@@ -74,13 +74,17 @@ tasks.named('processClientResources', ProcessResources) {
 }
 
 // ── 两个 jar：服务端 mcai / 客户端 mcai_client ────────────────────────────
+// 不用默认的 `jar`：Loom 的 splitEnvironmentSourceSets() 会把它当成 main+client 的
+// 混合 jar（还会出现两份 fabric.mod.json）。这里自己注册两个 Jar 任务，
+// build/libs 里只留契约要求的最终产物。
 def serverJarName = "mc-ai-fabric-${mcSuffix}-${modVersionSuffix}.jar"
 def clientJarName = "mc-ai-client-fabric-${mcSuffix}-${modVersionSuffix}.jar"
 
-tasks.named('jar', Jar) {
+tasks.register('serverJar', Jar) {
+    group = 'build'
+    description = '服务端模组 jar（mcai）'
     archiveFileName = serverJarName
-    // 显式只打服务端源码集，避免把 client 的类混进服务端 jar
-    setFrom(sourceSets.main.output)
+    from sourceSets.main.output
     from(rootProject.file('../../LICENSE')) {
         rename { 'LICENSE_mcai' }
     }
@@ -90,12 +94,6 @@ tasks.named('jar', Jar) {
                 'Implementation-Version': project.version
         )
     }
-}
-
-// 非 remapping 的 26.x 一般没有 remapJar；如果这个 Loom 版本仍然生成它，
-// 也把最终产物名固定成契约里的名字（jar 本身会被 Loom 挪到 devlibs，不会撞名）。
-tasks.matching { it.name == 'remapJar' }.configureEach {
-    archiveFileName = serverJarName
 }
 
 tasks.register('clientJar', Jar) {
@@ -114,10 +112,19 @@ tasks.register('clientJar', Jar) {
     }
 }
 
-// build / assemble 都要产出客户端 jar；build/libs 里只有这两个最终产物
+// 默认 jar 不产出任何被上传的产物；非 remapping 的 26.x 一般没有 remapJar，
+// 万一这个 Loom 版本生成它，也一并关掉，避免它去 remap 一个被禁用的 jar。
+tasks.named('jar') {
+    enabled = false
+}
+tasks.matching { it.name == 'remapJar' }.configureEach {
+    enabled = false
+}
+
+// build / assemble 都要产出这两个 jar
 tasks.named('assemble') {
-    dependsOn 'clientJar'
+    dependsOn 'serverJar', 'clientJar'
 }
 tasks.named('build') {
-    dependsOn 'clientJar'
+    dependsOn 'serverJar', 'clientJar'
 }
