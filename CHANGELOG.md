@@ -2,6 +2,24 @@
 
 版本号对应 git tag `vX.Y.Z`。
 
+## 1.4.0 — 2026-11-21
+
+- feat: **Bukkit 附件桥接**——服务器只装 Bukkit/Spigot/Paper 插件时，装了 mcai-client 1.4.0 的玩家也能用
+  `/ai screenshot`、`/ai file`：
+  - 新协议 `mcai-bridge/1`，通道 `mcai:bridge`（raw plugin message，只传元数据）；帧 = `"MCAI"` + u8 版本 + u8 类型 + payload
+  - 截图/文件字节走插件自带 HTTP 上传端口（默认 `25566`，`plugins/mc-ai/config.yml` 可配），大文件不塞 Minecraft 的 32KB 自定义包
+  - 一次性 token（`SecureRandom`，绑定玩家 UUID + transferId，TTL 默认 120 秒）；文件名只取 basename，绝不按玩家给的路径落盘
+  - 失败/超时（15 秒）/旧客户端一律降级为只发文字并提示；端口绑不上只禁用桥接，文字 `/ai`、`/weather`、`/vote` 不受影响
+- feat: 客户端 1.4.0（Forge 1.20.1 / NeoForge 1.21.1 / NeoForge 26.1–26.3 / Fabric 26.1–26.3）加入桥接：
+  登录时补发 `minecraft:register` + HELLO，收 INFO/REQUEST，HTTP 上传后回 DONE/ABORT；
+  原有 `mcai:net` / NeoForge payload / Fabric payload 逻辑不变（模组服行为照旧）
+- fix: Forge 1.20.1 客户端把 `mcai` 依赖从必装改为可选，否则连只装 Bukkit 插件的服务器会被判定「缺少服务端模组」
+- feat: 新增 `common/src/bridge`（Java 8、零依赖，插件与所有客户端共用）与 `tests/BridgeSelfTest.java`（55 项纯逻辑自测）
+- feat: Bukkit 插件新增 `plugins/mc-ai/config.yml`（`attachment.*`：enabled / transport / port / bind / advertise-host /
+  advertise-port / token-ttl-seconds / upload-timeout-seconds / max-image-mb / max-file-mb / max-concurrent）
+- chore: 全平台统一 1.4.0，19 个 jar 重建、产物名 `v1_3_0` → `v1_4_0`；服务端模组与 Forge 1.12.2 只升版本号，功能不变
+- docs: README 新增 Bukkit 附件桥接的安装/配置/限制；PROTOCOL 新增 `mcai-bridge/1` 章节
+
 ## 1.3.0 — 2026-11-20
 
 - feat: 多平台发布，同一套行为覆盖 Forge / NeoForge / Fabric / Bukkit：

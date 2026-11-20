@@ -25,7 +25,8 @@ def screenshotImpl = mcVersion.startsWith('26.1')
         : 'src/versioned/26_2plus/java'
 sourceSets.main.java.srcDir screenshotImpl
 // 客户端/插件共用的 mcai:bridge 协议层（Java 8 语法、零依赖）
-sourceSets.main.java.srcDir rootProject.file('../../../common/src/bridge/java')
+// 注意：本工程是 platforms/neoforge-26.x 的子工程，rootProject 是平台根目录
+sourceSets.main.java.srcDir rootProject.file('../../common/src/bridge/java')
 
 neoForge {
     version = neoVersion

@@ -49,6 +49,8 @@ tasks.withType(JavaCompile).configureEach {
 
 // 公共核心：直接加进服务端源码集（Java 8 语法，零依赖）
 sourceSets.main.java.srcDirs += rootProject.file('../../common/src/main/java')
+// 客户端/插件共用的 mcai:bridge 协议层（只给客户端 sourceSet，服务端模组不带）
+sourceSets.client.java.srcDirs += rootProject.file('../../common/src/bridge/java')
 
 def expandProps = [
         mc_version : mcVersion,
